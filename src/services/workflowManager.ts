@@ -10,6 +10,22 @@ export class WorkflowManager {
     private readonly taskExecutionEngine: TaskExecutionEngine,
   ) {}
 
+  public async buildPreset(preset: PresetInfo): Promise<void> {
+    const variables = this.createPresetVariables(preset);
+    const command = this.configurationManager.getPresetConfigureCommand(variables);
+    const label = `CMake Runner: Configure [${preset.name}]`;
+    const result = await this.taskExecutionEngine.executeBuild(command, label);
+
+    if (result.exitCode === 0) {
+      void vscode.window.showInformationMessage(`Preset ${preset.displayName} configured successfully.`);
+      return;
+    }
+
+    if (typeof result.exitCode === 'number') {
+      void vscode.window.showErrorMessage(`Configure failed for preset ${preset.displayName}. Exit code: ${result.exitCode}`);
+    }
+  }
+
   public async buildTarget(preset: PresetInfo, target: TargetInfo): Promise<void> {
     const variables = this.createVariables(preset, target);
     const command = this.configurationManager.getBuildCommand(variables);
@@ -94,6 +110,14 @@ export class WorkflowManager {
     if (!started) {
       void vscode.window.showWarningMessage(`Unable to start a debug session for ${target.displayName}. Make sure the C/C++ debug extension is installed and the executable exists.`);
     }
+  }
+
+  private createPresetVariables(preset: PresetInfo): { buildDir: string; preset: string; sourceDir: string } {
+    return {
+      buildDir: preset.binaryDir,
+      preset: preset.name,
+      sourceDir: preset.sourceDir,
+    };
   }
 
   private createVariables(preset: PresetInfo, target: TargetInfo): { buildDir: string; preset: string; target: string; sourceDir: string } {

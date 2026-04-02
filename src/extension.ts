@@ -38,6 +38,22 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   let presets: PresetInfo[] = [];
   let currentPreset: PresetInfo | undefined;
 
+  const selectPreset = async (preset: PresetInfo): Promise<void> => {
+    currentPreset = preset;
+    await context.workspaceState.update('psgmrunner.selectedPreset', currentPreset.name);
+    presetTreeDataProvider.setPresets(presets, currentPreset.name);
+    await updateTargets();
+
+    const presetTreeItem = presetTreeDataProvider.findItem(currentPreset.name);
+    if (presetTreeItem) {
+      try {
+        await presetsTreeView.reveal(presetTreeItem, { select: true, focus: false });
+      } catch {
+        // ignore
+      }
+    }
+  };
+
   const updateTargets = async (): Promise<void> => {
     const activeFile = vscode.window.activeTextEditor?.document.uri.fsPath;
     if (currentPreset) {
@@ -131,23 +147,23 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
           return;
         }
 
-        currentPreset = pick.preset;
-      } else {
-        currentPreset = item.preset;
+        await selectPreset(pick.preset);
+        return;
       }
 
-      await context.workspaceState.update('psgmrunner.selectedPreset', currentPreset.name);
-      presetTreeDataProvider.setPresets(presets, currentPreset.name);
-      await updateTargets();
-
-      const presetTreeItem = presetTreeDataProvider.findItem(currentPreset.name);
-      if (presetTreeItem) {
-        try {
-          await presetsTreeView.reveal(presetTreeItem, { select: true, focus: false });
-        } catch {
-          // ignore
-        }
+      await selectPreset(item.preset);
+    }),
+    vscode.commands.registerCommand('psgmrunner.buildPreset', async (item?: PresetTreeItem) => {
+      const preset = item?.preset ?? ensurePreset();
+      if (!preset) {
+        return;
       }
+
+      if (currentPreset?.name !== preset.name) {
+        await selectPreset(preset);
+      }
+
+      await workflowManager.buildPreset(preset);
     }),
     vscode.commands.registerCommand('psgmrunner.buildTarget', async (item?: TargetTreeItem | SourceTreeItem) => {
       const preset = ensurePreset();

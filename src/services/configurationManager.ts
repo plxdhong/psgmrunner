@@ -3,6 +3,10 @@ import { TaskVariables } from '../models';
 import { extractProgramPath, getDefaultExecutablePath, replaceTemplateVariables } from '../utils';
 
 export class ConfigurationManager {
+  public getPresetConfigureCommand(variables: Omit<TaskVariables, 'target'>): string {
+    return replaceTemplateVariables(this.settings().get<string>('tasks.presetConfigureCommandTemplate', ''), variables);
+  }
+
   public getBuildCommand(variables: TaskVariables): string {
     return replaceTemplateVariables(this.settings().get<string>('tasks.buildCommandTemplate', ''), variables);
   }

@@ -28,23 +28,27 @@
         "commands": [
             {
                 "command": "psgmrunner.refresh",
-                "title": "psgmrunner: Refresh"
+                "title": "Refresh"
             },
             {
                 "command": "psgmrunner.selectPreset",
-                "title": "psgmrunner: Select Preset"
+                "title": "Select Preset"
+            },
+            {
+                "command": "psgmrunner.buildPreset",
+                "title": "Build Preset"
             },
             {
                 "command": "psgmrunner.buildTarget",
-                "title": "psgmrunner: Build Target"
+                "title": "Build Target"
             },
             {
                 "command": "psgmrunner.runTarget",
-                "title": "psgmrunner: Run Target"
+                "title": "Run Target"
             },
             {
                 "command": "psgmrunner.debugTarget",
-                "title": "psgmrunner: Debug Target"
+                "title": "Debug Target"
             }
         ],
         "viewsContainers": {
@@ -83,6 +87,11 @@
                     "group": "inline@1"
                 },
                 {
+                    "command": "psgmrunner.buildPreset",
+                    "when": "view == psgmrunner.presets && viewItem == preset",
+                    "group": "inline@2"
+                },
+                {
                     "command": "psgmrunner.buildTarget",
                     "when": "view == psgmrunner.targets && viewItem == target",
                     "group": "inline@1"
@@ -106,6 +115,11 @@
                     "type": "string",
                     "default": "cmake --build ${buildDir} --config ${preset} --target ${target}",
                     "description": "Build command template. Supports ${buildDir}, ${preset}, ${target}, and ${sourceDir}."
+                },
+                "psgmrunner.tasks.presetConfigureCommandTemplate": {
+                    "type": "string",
+                    "default": "cmake --preset ${preset}",
+                    "description": "Preset configure command template. Supports ${buildDir}, ${preset}, and ${sourceDir}."
                 },
                 "psgmrunner.tasks.runCommandTemplate": {
                     "type": "string",
