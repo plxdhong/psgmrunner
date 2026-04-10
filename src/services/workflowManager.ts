@@ -13,7 +13,7 @@ export class WorkflowManager {
   ) {}
 
   public async buildPreset(preset: PresetInfo): Promise<boolean> {
-    this.logger.info(`Starting configure for preset ${preset.name}`);
+    // this.logger.info(`Starting configure for preset ${preset.name}`);
     await this.ensureCMakeFileApiQuery(preset);
     const variables = this.createPresetVariables(preset);
     const command = this.configurationManager.getPresetConfigureCommand(variables);
@@ -21,7 +21,7 @@ export class WorkflowManager {
     const result = await this.taskExecutionEngine.executeBuild(command, label, vscode.TaskRevealKind.Never);
 
     if (result.exitCode === 0) {
-      this.logger.info(`Configure succeeded for preset ${preset.name}`);
+    //   this.logger.info(`Configure succeeded for preset ${preset.name}`);
       return true;
     }
 
@@ -34,14 +34,14 @@ export class WorkflowManager {
   }
 
   public async buildTarget(preset: PresetInfo, target: TargetInfo): Promise<void> {
-    this.logger.info(`Starting build for target ${target.name} with preset ${preset.name}`);
+    // this.logger.info(`Starting build for target ${target.name} with preset ${preset.name}`);
     const variables = this.createVariables(preset, target);
     const command = this.configurationManager.getBuildCommand(variables);
     const label = `CMake Runner: Build ${target.displayName} [${preset.name}]`;
-    const result = await this.taskExecutionEngine.executeBuild(command, label);
+    const result = await this.taskExecutionEngine.executeBuild(command, label, vscode.TaskRevealKind.Never);
 
     if (result.exitCode === 0) {
-      this.logger.info(`Build succeeded for target ${target.name}`);
+    //   this.logger.info(`Build succeeded for target ${target.name}`);
       const action = await vscode.window.showInformationMessage(
         `Target ${target.displayName} built successfully.`,
         'Run',

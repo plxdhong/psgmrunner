@@ -27,7 +27,7 @@ export class PresetProvider {
     const presetsPath = vscode.Uri.file(path.join(this.workspaceRoot, 'CMakePresets.json'));
     let content: Uint8Array;
 
-    this.logger.info(`Loading presets from ${presetsPath.fsPath}`);
+    // this.logger.info(`Loading presets from ${presetsPath.fsPath}`);
 
     try {
       content = await vscode.workspace.fs.readFile(presetsPath);
@@ -72,6 +72,7 @@ export class PresetProvider {
       .filter((preset) => !preset.hidden && !!preset.name && !!preset.binaryDir)
       .map((preset) => {
         const variables = {
+          presetName: preset.name,
           sourceDir: this.workspaceRoot,
           workspaceFolder: this.workspaceRoot,
         };
@@ -87,7 +88,7 @@ export class PresetProvider {
       })
       .sort((left, right) => left.displayName.localeCompare(right.displayName));
 
-    this.logger.info(`Loaded ${presets.length} visible configure preset(s)`);
+    // this.logger.info(`Loaded ${presets.length} visible configure preset(s)`);
     return presets;
   }
 }

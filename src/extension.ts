@@ -78,7 +78,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   };
 
   const refresh = async (preferredPresetName?: string): Promise<void> => {
-    logger.info(`Refreshing presets. preferredPreset=${preferredPresetName ?? 'none'}`);
+    // logger.info(`Refreshing presets. preferredPreset=${preferredPresetName ?? 'none'}`);
     presets = await presetProvider.loadPresets();
     const storedPresetName = preferredPresetName ?? context.workspaceState.get<string>('psgmrunner.selectedPreset');
     currentPreset = presets.find((preset) => preset.name === storedPresetName) ?? presets[0];
@@ -87,7 +87,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       await context.workspaceState.update('psgmrunner.selectedPreset', currentPreset.name);
     }
 
-    logger.info(`Refresh completed. presets=${presets.length}, selected=${currentPreset?.name ?? 'none'}`);
+    // logger.info(`Refresh completed. presets=${presets.length}, selected=${currentPreset?.name ?? 'none'}`);
     presetTreeDataProvider.setPresets(presets, currentPreset?.name);
     // await updateTargets();
   };

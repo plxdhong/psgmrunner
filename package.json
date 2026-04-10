@@ -37,19 +37,19 @@
             },
             {
                 "command": "psgmrunner.buildPreset",
-                "title": "Build Preset"
+                "title": "Build"
             },
             {
                 "command": "psgmrunner.buildTarget",
-                "title": "Build Target"
+                "title": "Build"
             },
             {
                 "command": "psgmrunner.runTarget",
-                "title": "Run Target"
+                "title": "Run"
             },
             {
                 "command": "psgmrunner.debugTarget",
-                "title": "Debug Target"
+                "title": "Debug"
             }
         ],
         "viewsContainers": {
