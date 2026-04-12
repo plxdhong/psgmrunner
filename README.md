@@ -1,131 +1,185 @@
 # psgmrunner
 
-`psgmrunner` is a VS Code extension for CMake-based C++ projects. It provides a preset-aware sidebar and a native task workflow for **configure-target discovery-build-run-debug** scenarios.
+`psgmrunner` 是一个面向 CMake C++ 项目的 VS Code 扩展，核心目标是把“选择 Preset -> 配置项目 -> 找到可执行目标 -> 构建 -> 运行/调试”这条链路放进一个更直接的侧边栏工作流里。
 
-This repository currently contains the extension source code and a packaged artifact:
+它适合已经使用 `CMakePresets.json` 管理构建目录、并希望按“当前源码文件对应哪个可执行程序”来工作的人群。
 
-- VSIX package: `psgmrunner-0.0.1.vsix`
-- Source entry: `src/extension.ts`
+详细实现与架构说明已移动到 `doc/architecture.zh-CN.md`。
 
----
+## 插件能做什么
 
-## Features
+- 自动识别工作区中的 `CMakePresets.json`
+- 在侧边栏展示可用的 configure preset
+- 基于 CMake File API 识别可执行目标及其源码文件
+- 建立“源文件 -> 可执行目标”的映射关系
+- 根据当前编辑器中的源码文件自动定位对应目标
+- 直接在 VS Code 中执行 preset configure、target build、run、debug
+- 支持目标过滤，方便项目较大时快速定位目标
+- 支持通过 `settings.json` 自定义 configure / build / run 命令模板
 
-### 1. Preset discovery
-- Activates when the workspace contains `CMakePresets.json`
-- Reads CMake configure presets
-- Filters out presets with `hidden: true`
-- Resolves `binaryDir` with basic variable replacement such as `${sourceDir}`
+## 适用场景
 
-### 2. Source-to-target mapping
-- Reads CMake File API metadata from the selected preset build directory after configure
-- Reads `compile_commands.json` from the selected preset build directory
-- Lists executable targets from CMake-generated metadata and builds source-to-target mappings
-- Supports automatic target lookup from the active editor file
+### 1. 使用 CMake Presets 管理多套构建目录
+例如 `debug`、`release`、`clang-debug`、`msvc-debug` 等配置。你可以先选中一个 preset，再基于该 preset 的构建目录查看目标和执行任务。
 
-### 3. Sidebar views
-- **Presets** view for available configure presets
-- **Targets** view for executable targets and their source files
-- Auto reveal and highlight when switching the active editor file
+### 2. 一个仓库里有多个可执行程序
+当项目里有多个 demo、tool、test 或主程序时，插件会在 **Targets** 视图中列出可执行目标，减少手动查找构建命令的成本。
 
-### 4. Native task workflow
-- Build with VS Code `Task` API
-- Problem matchers for GCC/MSVC compilation output
-- Run target after build
-- Start a C++ debug session after build success
+### 3. 希望从当前源码快速反查归属目标
+打开 `main.cpp`、`app.cpp`、`demo.cpp` 之类文件时，插件会尝试自动定位对应 target，适合多目标工程日常开发。
 
-### 5. Extension settings
-The extension contributes the following settings:
+### 4. 希望保留 VS Code 原生任务与调试体验
+插件使用 VS Code 的 Tasks API 和调试接口，不强依赖额外的工作流面板，便于融入现有开发习惯。
 
-- `psgmrunner.tasks.buildCommandTemplate`
-- `psgmrunner.tasks.runCommandTemplate`
-- `psgmrunner.tasks.clearTerminalBeforeRun`
+## 工作方式
 
-Supported variables:
+插件围绕两块侧边栏视图工作：
+
+- `Presets`：展示并选择 CMake configure preset
+- `Targets`：展示当前 preset 下识别到的可执行目标及其源文件
+
+典型流程如下：
+
+1. 打开包含 `CMakePresets.json` 的工作区
+2. 在 `Presets` 视图选择一个 preset
+3. 触发 `Build` 对 preset 先执行 configure
+4. 插件读取构建目录中的元数据并刷新 `Targets`
+5. 在 `Targets` 视图对目标执行 Build / Run / Debug
+6. 打开某个源码文件时，插件自动尝试在树中定位它所属的 target
+
+## 使用前提
+
+使用前请确认项目环境满足以下条件：
+
+1. 工作区根目录包含有效的 `CMakePresets.json`
+2. 项目本身是可正常 configure / build 的 CMake C++ 工程
+3. VS Code 中可用 C/C++ 调试环境
+   - Windows 通常为 `cppvsdbg`
+   - Linux / macOS 通常为 `cppdbg`
+4. 需要先成功执行一次 configure，让构建目录中生成 CMake File API reply 数据
+
+默认情况下，插件在执行 preset configure 时会主动写入 `.cmake/api/v1/query/codemodel-v2` 查询文件，并附带 `-DCMAKE_EXPORT_COMPILE_COMMANDS=ON`。当前目标发现和源码映射主要依赖 File API；开启 `compile_commands.json` 仍然是推荐做法，但不再是当前实现的必要条件。
+
+## 安装方式
+
+### 通过 VSIX 安装
+
+1. 在 VS Code 中打开命令面板
+2. 执行 `Extensions: Install from VSIX...`
+3. 选择仓库中的 `psgmrunner-0.0.1.vsix`
+
+### 通过命令行安装
+
+```bash
+code --install-extension psgmrunner-0.0.1.vsix
+```
+
+## 快速上手
+
+### 1. 打开项目
+
+打开包含 `CMakePresets.json` 的 CMake 项目目录。插件会自动激活。
+
+### 2. 选择 Preset
+
+在活动栏打开 `psgmrunner`，进入 **Presets** 视图并选择一个 configure preset。
+
+### 3. 配置并发现目标
+
+对选中的 preset 执行 `Build`。插件会先运行 configure，然后从以下位置读取元数据：
+
+```text
+<binaryDir>/CMakeCache.txt
+<binaryDir>/.cmake/api/v1/reply/
+```
+
+如果 configure 成功，**Targets** 视图中会显示该 preset 下识别到的可执行目标。
+
+### 4. 构建目标
+
+在 **Targets** 视图中对目标执行 `Build`，或先打开某个已建立映射的源码文件，再触发构建命令。
+
+### 5. 运行或调试
+
+你可以直接对目标执行以下操作；`Run` 和 `Debug` 在默认流程下都会先触发一次构建：
+
+- `Run`
+- `Debug`
+
+### 6. 过滤目标
+
+如果目标较多，可在 **Targets** 视图中使用 `Filter`，按目标名或源码文件名快速筛选。
+
+## 常见使用命令
+
+插件当前提供以下主要命令：
+
+- `psgmrunner.refresh`：刷新 preset 和 target 信息
+- `psgmrunner.selectPreset`：选择 configure preset
+- `psgmrunner.buildPreset`：对 preset 执行 configure / 刷新目标
+- `psgmrunner.buildTarget`：构建目标
+- `psgmrunner.runTarget`：运行目标
+- `psgmrunner.debugTarget`：调试目标
+- `psgmrunner.filterTargets`：筛选目标
+- `psgmrunner.clearTargetFilter`：清除筛选条件
+
+## 配置说明
+
+插件通过 VS Code `settings.json` 提供以下配置项：
+
+| 配置项 | 默认值 | 说明 |
+| --- | --- | --- |
+| `psgmrunner.tasks.presetConfigureCommandTemplate` | `cmake --preset ${preset} -DCMAKE_EXPORT_COMPILE_COMMANDS=ON` | 配置 preset 时执行的命令模板 |
+| `psgmrunner.tasks.buildCommandTemplate` | `cmake --build ${buildDir}${configurationArgument} --target ${target}` | 构建目标时执行的命令模板 |
+| `psgmrunner.tasks.runCommandTemplate` | `${executableCommand}` | 运行目标时执行的命令模板 |
+| `psgmrunner.tasks.clearTerminalBeforeRun` | `true` | 构建或运行前是否清理共享终端 |
+
+### 支持的变量
+
+#### configure 模板支持
+
+- `${buildDir}`
+- `${preset}`
+- `${sourceDir}`
+
+#### build / run 模板支持
 
 - `${buildDir}`
 - `${preset}`
 - `${target}`
 - `${sourceDir}`
+- `${buildPreset}`
+- `${configuration}`
+- `${configurationArgument}`
+- `${buildPresetArgument}`
+- `${executablePath}`
+- `${quotedExecutablePath}`
+- `${executableCommand}`
 
----
+### 配置示例
 
-## Requirements
-
-Before using the extension, make sure your workspace provides:
-
-1. A valid `CMakePresets.json`
-2. A configured preset build directory that contains `CMakeCache.txt`
-3. A generated `compile_commands.json` if you want source-to-target editor mapping
-4. A C++ debug environment in VS Code
-   - Windows: usually `cppvsdbg`
-   - Linux/macOS: usually `cppdbg`
-5. A working CMake-based C++ project
-
-`Build Preset` now runs CMake configure with `-DCMAKE_EXPORT_COMPILE_COMMANDS=ON` by default, so `compile_commands.json` is generated automatically unless you override `psgmrunner.tasks.presetConfigureCommandTemplate`.
-
-If `compile_commands.json` is still missing, the extension can still list executable targets from CMake metadata, but source-file mapping will be empty.
-
----
-
-## Install the extension manually
-
-### Option 1: Install from VSIX in VS Code
-1. Open VS Code
-2. Run command: **Extensions: Install from VSIX...**
-3. Select `psgmrunner-0.0.1.vsix`
-
-### Option 2: Install from command line
-```bash
-code --install-extension psgmrunner-0.0.1.vsix
+```json
+{
+  "psgmrunner.tasks.presetConfigureCommandTemplate": "cmake --preset ${preset} -DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+  "psgmrunner.tasks.buildCommandTemplate": "cmake --build ${buildDir}${configurationArgument} --target ${target}",
+  "psgmrunner.tasks.runCommandTemplate": "${executableCommand}",
+  "psgmrunner.tasks.clearTerminalBeforeRun": true
+}
 ```
 
----
+### Windows 自定义运行命令示例
 
-## How to use
+如果你希望显式指定运行方式，可以按需覆盖为 PowerShell 风格命令：
 
-### 1. Open a CMake C++ workspace
-Open a folder that contains `CMakePresets.json`.
-
-### 2. Select a preset
-In the `psgmrunner` activity bar view:
-- Open the **Presets** panel
-- Choose one configure preset
-- The extension loads the preset `binaryDir`
-
-### 3. Load targets
-After a preset is selected, the extension looks for CMake-generated metadata in the build directory, including:
-
-```text
-<binaryDir>/CMakeCache.txt
-<binaryDir>/compile_commands.json
-<binaryDir>/.cmake/api/v1/reply/
+```json
+{
+  "psgmrunner.tasks.runCommandTemplate": "& ${quotedExecutablePath}"
+}
 ```
 
-If configure metadata is available, executable targets will appear in the **Targets** panel.
+## 推荐的 CMake Presets 写法
 
-### 4. Build a target
-In the **Targets** view:
-- Click the build action on a target
-- Or trigger the build command when a mapped source file is active
-
-### 5. Run or debug
-After a successful build, the extension shows actions to:
-- Run
-- Debug
-
-You can also directly invoke run/debug actions from the target item context menu.
-
-### 6. Active editor sync
-When you open a source file that exists in the mapping index, the **Targets** tree automatically reveals the corresponding target/source node.
-
----
-
-## Recommended CMake setup
-
-To improve compatibility, enable compile commands in your CMake configure flow.
-
-Example:
+建议在 preset 中显式启用 `CMAKE_EXPORT_COMPILE_COMMANDS`，这样有助于与其他 C++ 工具链保持兼容；但就当前插件实现而言，目标发现和源码映射主要依赖 CMake File API：
 
 ```json
 {
@@ -142,131 +196,34 @@ Example:
 }
 ```
 
----
+## 已知限制
 
-## Extension settings example
+- 目标发现和源码映射依赖 CMake File API reply；如果项目尚未成功 configure，则不会显示目标列表
+- 当前主要聚焦 configure 后的 target discovery、build、run、debug，不负责完整的 CMake 项目管理
+- 调试配置为运行时动态创建，默认依赖系统中已安装可用的 C/C++ 调试后端
 
-Add settings in your workspace or user `settings.json`:
+## 开发与打包
 
-```json
-{
-  "psgmrunner.tasks.presetConfigureCommandTemplate": "cmake --preset ${preset} -DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
-  "psgmrunner.tasks.buildCommandTemplate": "cmake --build ${buildDir} --config ${preset} --target ${target}",
-  "psgmrunner.tasks.runCommandTemplate": "${buildDir}/${target}",
-  "psgmrunner.tasks.clearTerminalBeforeRun": true
-}
-```
+### 本地开发
 
-### Notes about command templates
-- `${target}` is the inferred executable target name
-- `${buildDir}` comes from the selected preset
-- `${sourceDir}` is the workspace root
-- Keep `-DCMAKE_EXPORT_COMPILE_COMMANDS=ON` in the preset configure command if you want automatic target mapping
-- On Windows, you may customize the run command to append `.exe` if needed
-
-Example:
-
-```json
-{
-  "psgmrunner.tasks.runCommandTemplate": "${buildDir}/${target}.exe"
-}
-```
-
----
-
-## Development
-
-### 1. Install dependencies
 ```bash
 npm install
-```
-
-### 2. Compile TypeScript
-```bash
 npm run compile
 ```
 
-### 3. Watch mode
-```bash
-npm run watch
-```
+在 VS Code 中打开本仓库后按 `F5`，会启动 Extension Development Host 进行调试。
 
-### 4. Run the extension in VS Code
-- Open this repository in VS Code
-- Press `F5`
-- A new Extension Development Host window will open
-- Open a CMake C++ workspace inside that window for testing
-
----
-
-## Packaging
-
-Create a VSIX package with:
+### 打包 VSIX
 
 ```bash
 npx @vscode/vsce package --allow-missing-repository
 ```
 
-Generated artifact:
+## 文档
 
-```text
-psgmrunner-0.0.1.vsix
-```
-
----
-
-## Project structure
-
-```text
-.
-├─ package.json
-├─ tsconfig.json
-├─ src/
-│  ├─ extension.ts
-│  ├─ models.ts
-│  ├─ utils.ts
-│  ├─ services/
-│  │  ├─ configurationManager.ts
-│  │  ├─ mappingEngine.ts
-│  │  ├─ presetProvider.ts
-│  │  ├─ taskExecutionEngine.ts
-│  │  └─ workflowManager.ts
-│  └─ ui/
-│     ├─ presetTreeDataProvider.ts
-│     └─ targetTreeDataProvider.ts
-└─ resources/
-   └─ cmake-runner.svg
-```
-
-### Main modules
-- `PresetProvider`: parse `CMakePresets.json`
-- `MappingEngine`: read CMake metadata, list executable targets, and build source-to-target mappings
-- `TaskExecutionEngine`: execute build and run tasks
-- `WorkflowManager`: coordinate build, run, and debug lifecycle
-- `PresetTreeDataProvider` / `TargetTreeDataProvider`: render sidebar views
-
----
-
-## Known limitations
-
-1. Source-file mapping still depends on `compile_commands.json`, so editor-to-target reveal is limited when compile commands are unavailable.
-2. Debug launch configuration is created dynamically and assumes a valid C/C++ debugging backend is available.
-3. The current workflow focuses on build/run/debug and does not manage the configure/generate phase automatically.
-
----
-
-## Future improvements
-
-Possible next steps:
-
-- Add automatic configure/generate support
-- Add better multi-root workspace support
-- Add smarter executable path inference
-- Add direct debug launch without confirmation dialog
-- Add tests for preset parsing and mapping logic
-
----
+- 使用说明：`README.md`
+- 架构说明：`doc/architecture.zh-CN.md`
 
 ## License
 
-This repository currently has no dedicated license file. Add `LICENSE` if you plan to distribute it publicly.
+项目当前使用 `MIT` 许可证，具体以 `package.json` 中声明为准。
