@@ -21,6 +21,7 @@ interface FileApiCodemodelTargetRef {
 }
 
 interface FileApiCodemodelConfiguration {
+  readonly name?: string;
   readonly targets?: FileApiCodemodelTargetRef[];
 }
 
@@ -114,7 +115,10 @@ export class MappingEngine {
     // this.logger.info(`Reading CMake File API index ${indexPath.fsPath}`);
     // this.logger.info(`Reading CMake File API codemodel ${codemodelPath.fsPath}`);
 
-    for (const configuration of codemodel.configurations ?? []) {
+    const configurations = codemodel.configurations ?? [];
+    const hasMultipleConfigurations = configurations.length > 1;
+
+    for (const configuration of configurations) {
       for (const targetRef of configuration.targets ?? []) {
         if (!targetRef.jsonFile) {
           continue;
@@ -134,12 +138,21 @@ export class MappingEngine {
             .filter((source) => !!source.path && !source.isGenerated)
             .map((source) => toAbsolutePath(source.path as string, preset.sourceDir)),
         );
-        const targetKey = normalizePath(target.name);
+        const configurationName = configuration.name?.trim();
+        const targetDisplayName = hasMultipleConfigurations && configurationName
+          ? `${target.name} [${configurationName}]`
+          : target.name;
+        const targetKey = normalizePath(
+          hasMultipleConfigurations && configurationName
+            ? `${target.name}::${configurationName}`
+            : target.name,
+        );
 
         targets.set(targetKey, {
           id: targetKey,
           name: target.name,
-          displayName: target.name,
+          displayName: targetDisplayName,
+          configuration: configurationName,
           sourceFiles,
           guessedExecutablePath: executablePath,
         });

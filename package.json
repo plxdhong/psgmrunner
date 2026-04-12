@@ -46,6 +46,14 @@
                 "title": "Build"
             },
             {
+                "command": "psgmrunner.filterTargets",
+                "title": "Filter"
+            },
+            {
+                "command": "psgmrunner.clearTargetFilter",
+                "title": "Clear Filter"
+            },
+            {
                 "command": "psgmrunner.runTarget",
                 "title": "Run"
             },
@@ -81,6 +89,16 @@
                     "command": "psgmrunner.refresh",
                     "when": "view == psgmrunner.presets || view == psgmrunner.targets",
                     "group": "navigation"
+                },
+                {
+                    "command": "psgmrunner.filterTargets",
+                    "when": "view == psgmrunner.targets",
+                    "group": "navigation@1"
+                },
+                {
+                    "command": "psgmrunner.clearTargetFilter",
+                    "when": "view == psgmrunner.targets && psgmrunner.targetsFilterActive",
+                    "group": "navigation@2"
                 }
             ],
             "view/item/context": [
@@ -111,8 +129,8 @@
             "properties": {
                 "psgmrunner.tasks.buildCommandTemplate": {
                     "type": "string",
-                    "default": "cmake --build ${buildDir} --config ${preset} --target ${target}",
-                    "description": "Build command template. Supports ${buildDir}, ${preset}, ${target}, and ${sourceDir}."
+                    "default": "cmake --build ${buildDir}${configurationArgument} --target ${target}",
+                    "description": "Build command template. Supports ${buildDir}, ${preset}, ${target}, ${sourceDir}, ${buildPreset}, ${configuration}, ${configurationArgument}, ${buildPresetArgument}, ${executablePath}, ${quotedExecutablePath}, and ${executableCommand}."
                 },
                 "psgmrunner.tasks.presetConfigureCommandTemplate": {
                     "type": "string",
@@ -121,8 +139,8 @@
                 },
                 "psgmrunner.tasks.runCommandTemplate": {
                     "type": "string",
-                    "default": "${buildDir}/${target}",
-                    "description": "Run command template. Supports ${buildDir}, ${preset}, ${target}, and ${sourceDir}."
+                    "default": "${executableCommand}",
+                    "description": "Run command template. Supports ${buildDir}, ${preset}, ${target}, ${sourceDir}, ${buildPreset}, ${configuration}, ${configurationArgument}, ${buildPresetArgument}, ${executablePath}, ${quotedExecutablePath}, and ${executableCommand}."
                 },
                 "psgmrunner.tasks.clearTerminalBeforeRun": {
                     "type": "boolean",

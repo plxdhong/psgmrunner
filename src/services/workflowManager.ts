@@ -1,6 +1,7 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { PresetInfo, TargetInfo } from '../models';
+import { quoteForShell } from '../utils';
 import { ConfigurationManager } from './configurationManager';
 import { OutputLogger } from './outputLogger';
 import { TaskExecutionEngine } from './taskExecutionEngine';
@@ -17,7 +18,7 @@ export class WorkflowManager {
     await this.ensureCMakeFileApiQuery(preset);
     const variables = this.createPresetVariables(preset);
     const command = this.configurationManager.getPresetConfigureCommand(variables);
-    const label = `CMake Runner: Configure [${preset.name}]`;
+    const label = `PSGM Runner: Configure [${preset.name}]`;
     const result = await this.taskExecutionEngine.executeBuild(command, label, vscode.TaskRevealKind.Never);
 
     if (result.exitCode === 0) {
@@ -37,7 +38,7 @@ export class WorkflowManager {
     // this.logger.info(`Starting build for target ${target.name} with preset ${preset.name}`);
     const variables = this.createVariables(preset, target);
     const command = this.configurationManager.getBuildCommand(variables);
-    const label = `CMake Runner: Build ${target.displayName} [${preset.name}]`;
+    const label = `PSGM Runner: Build ${target.displayName} [${preset.name}]`;
     const result = await this.taskExecutionEngine.executeBuild(command, label, vscode.TaskRevealKind.Never);
 
     if (result.exitCode === 0) {
@@ -70,7 +71,7 @@ export class WorkflowManager {
     if (buildFirst) {
       const buildVariables = this.createVariables(preset, target);
       const buildCommand = this.configurationManager.getBuildCommand(buildVariables);
-      const buildLabel = `CMake Runner: Build ${target.displayName} [${preset.name}]`;
+      const buildLabel = `PSGM Runner: Build ${target.displayName} [${preset.name}]`;
       const buildResult = await this.taskExecutionEngine.executeBuild(buildCommand, buildLabel);
       if (buildResult.exitCode !== 0) {
         if (typeof buildResult.exitCode === 'number') {
@@ -83,7 +84,7 @@ export class WorkflowManager {
 
     const runVariables = this.createVariables(preset, target);
     const runCommand = this.configurationManager.getRunCommand(runVariables);
-    const runLabel = `CMake Runner: Run ${target.displayName} [${preset.name}]`;
+    const runLabel = `PSGM Runner: Run ${target.displayName} [${preset.name}]`;
     this.logger.info(`Launching run task for target ${target.name}`);
     await this.taskExecutionEngine.executeRun(runCommand, runLabel);
   }
@@ -92,7 +93,7 @@ export class WorkflowManager {
     // this.logger.info(`Starting debug flow for target ${target.name} with preset ${preset.name}`);
     const buildVariables = this.createVariables(preset, target);
     const buildCommand = this.configurationManager.getBuildCommand(buildVariables);
-    const buildLabel = `CMake Runner: Build ${target.displayName} [${preset.name}]`;
+    const buildLabel = `PSGM Runner: Build ${target.displayName} [${preset.name}]`;
     const result = await this.taskExecutionEngine.executeBuild(buildCommand, buildLabel);
 
     if (result.exitCode === 0) {
@@ -142,17 +143,26 @@ export class WorkflowManager {
     };
   }
 
-  private createVariables(preset: PresetInfo, target: TargetInfo): { buildDir: string; preset: string; target: string; sourceDir: string } {
+  private createVariables(preset: PresetInfo, target: TargetInfo): { buildDir: string; preset: string; target: string; sourceDir: string; buildPreset?: string; configuration?: string; configurationArgument: string; executablePath: string; quotedExecutablePath: string; executableCommand: string; buildPresetArgument: string} {
+    const configuration = target.configuration ?? preset.configuration;
+    const quotedExecutablePath = quoteForShell(target.guessedExecutablePath);
     return {
       buildDir: preset.binaryDir,
       preset: preset.name,
       target: target.name,
       sourceDir: preset.sourceDir,
+      buildPreset: preset.buildPresetName,
+      configuration,
+      configurationArgument: configuration ? ` --config ${configuration}` : '',
+      executablePath: target.guessedExecutablePath,
+      quotedExecutablePath,
+      executableCommand: process.platform === 'win32' ? `& ${quotedExecutablePath}` : quotedExecutablePath,
+      buildPresetArgument: preset.buildPresetName ? ` --preset ${preset.buildPresetName}` : '',
     };
   }
 
   private async ensureCMakeFileApiQuery(preset: PresetInfo): Promise<void> {
-    const queryDir = vscode.Uri.file(path.join(preset.binaryDir, '.cmake', 'api', 'v1', 'query', 'client-psgmrunner'));
+    const queryDir = vscode.Uri.file(path.join(preset.binaryDir, '.cmake', 'api', 'v1', 'query'));
     const queryFile = vscode.Uri.file(path.join(queryDir.fsPath, 'codemodel-v2'));
 
     try {

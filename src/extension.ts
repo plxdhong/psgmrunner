@@ -40,6 +40,20 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   context.subscriptions.push(outputChannel, presetsTreeView, targetsTreeView);
 
+  const updateTargetViewState = async (): Promise<void> => {
+    const filterText = targetTreeDataProvider.getFilterText();
+    targetsTreeView.description = filterText ? `Filter: ${filterText}` : undefined;
+    targetsTreeView.message = filterText && targetTreeDataProvider.getVisibleTargetCount() === 0
+      ? 'No executable target matches the current filter.'
+      : undefined;
+    await vscode.commands.executeCommand('setContext', 'psgmrunner.targetsFilterActive', !!filterText);
+  };
+
+  const applyTargetFilter = async (filterText: string): Promise<void> => {
+    targetTreeDataProvider.setFilterText(filterText);
+    await updateTargetViewState();
+  };
+
   let presets: PresetInfo[] = [];
   let currentPreset: PresetInfo | undefined;
 
@@ -69,12 +83,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       const targets = mappingEngine.getTargets();
     //   logger.info(`Resolved ${targets.length} mapped target(s) for preset ${currentPreset.name}`);
       targetTreeDataProvider.setTargets(targets, currentPreset.sourceDir, activeFile);
+      await updateTargetViewState();
     //   await revealActiveSource(activeFile);
       return;
     }
 
     logger.warn('Skipping target update because no preset is selected');
     targetTreeDataProvider.setTargets([], workspaceRoot, activeFile);
+    await updateTargetViewState();
   };
 
   const refresh = async (preferredPresetName?: string): Promise<void> => {
@@ -156,6 +172,22 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   context.subscriptions.push(
     vscode.commands.registerCommand('psgmrunner.refresh', async () => {
       await refresh(currentPreset?.name);
+    }),
+    vscode.commands.registerCommand('psgmrunner.filterTargets', async () => {
+      const filterText = await vscode.window.showInputBox({
+        prompt: 'Filter targets by executable name or C/C++ source file name',
+        placeHolder: 'Example: app, main.cpp, demo.exe',
+        value: targetTreeDataProvider.getFilterText(),
+      });
+
+      if (filterText === undefined) {
+        return;
+      }
+
+      await applyTargetFilter(filterText);
+    }),
+    vscode.commands.registerCommand('psgmrunner.clearTargetFilter', async () => {
+      await applyTargetFilter('');
     }),
     vscode.commands.registerCommand('psgmrunner.selectPreset', async (item?: PresetTreeItem) => {
       if (!item) {
@@ -246,6 +278,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   );
 
   await refresh();
+  await updateTargets();
 }
 
 export function deactivate(): void {

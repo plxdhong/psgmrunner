@@ -3,6 +3,8 @@ export interface PresetInfo {
   readonly displayName: string;
   readonly binaryDir: string;
   readonly sourceDir: string;
+  readonly buildPresetName?: string;
+  readonly configuration?: string;
   readonly description?: string;
 }
 
@@ -10,6 +12,7 @@ export interface TargetInfo {
   readonly id: string;
   readonly name: string;
   readonly displayName: string;
+  readonly configuration?: string;
   readonly sourceFiles: string[];
   readonly guessedExecutablePath: string;
 }
@@ -24,6 +27,13 @@ export interface TaskVariables {
   readonly preset: string;
   readonly target: string;
   readonly sourceDir: string;
+  readonly buildPreset?: string;
+  readonly configuration?: string;
+  readonly configurationArgument: string;
+  readonly executablePath?: string;
+  readonly quotedExecutablePath: string;
+  readonly executableCommand: string;
+  readonly buildPresetArgument: string;
 }
 
 export interface TaskExecutionResult {

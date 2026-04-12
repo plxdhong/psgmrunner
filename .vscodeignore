@@ -6,3 +6,6 @@ design.md
 node_modules/**
 **/*.ts
 **/*.tsbuildinfo
+# 排除 Source Map 文件
+**/*.map        
+doc/**

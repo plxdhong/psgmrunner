@@ -2,8 +2,10 @@ import * as vscode from 'vscode';
 import { TaskVariables } from '../models';
 import { extractProgramPath, getDefaultExecutablePath, replaceTemplateVariables } from '../utils';
 
+type PresetTaskVariables = Pick<TaskVariables, 'buildDir' | 'preset' | 'sourceDir'>;
+
 export class ConfigurationManager {
-  public getPresetConfigureCommand(variables: Omit<TaskVariables, 'target'>): string {
+  public getPresetConfigureCommand(variables: PresetTaskVariables): string {
     return replaceTemplateVariables(this.settings().get<string>('tasks.presetConfigureCommandTemplate', ''), variables);
   }
 
@@ -22,7 +24,7 @@ export class ConfigurationManager {
   public resolveDebugProgram(variables: TaskVariables): string {
     const runCommand = this.getRunCommand(variables);
     const inferredProgram = extractProgramPath(runCommand);
-    return inferredProgram || getDefaultExecutablePath(variables.buildDir, variables.target);
+    return inferredProgram || variables.executablePath || getDefaultExecutablePath(variables.buildDir, variables.target);
   }
 
   private settings(): vscode.WorkspaceConfiguration {

@@ -38,8 +38,10 @@ type Node = TargetTreeItem | SourceTreeItem;
 export class TargetTreeDataProvider implements vscode.TreeDataProvider<Node> {
   private readonly onDidChangeTreeDataEmitter = new vscode.EventEmitter<Node | undefined | void>();
   private targets: TargetInfo[] = [];
+  private filteredTargets: TargetInfo[] = [];
   private sourceDir = '';
   private activeSourcePath?: string;
+  private filterText = '';
   private targetItems = new Map<string, TargetTreeItem>();
   private sourceItems = new Map<string, SourceTreeItem>();
 
@@ -59,18 +61,33 @@ export class TargetTreeDataProvider implements vscode.TreeDataProvider<Node> {
     this.onDidChangeTreeDataEmitter.fire();
   }
 
+  public setFilterText(filterText: string): void {
+    this.filterText = filterText.trim();
+    this.rebuildCache();
+    this.onDidChangeTreeDataEmitter.fire();
+  }
+
+  public getFilterText(): string {
+    return this.filterText;
+  }
+
+  public getVisibleTargetCount(): number {
+    return this.filteredTargets.length;
+  }
+
   public getTreeItem(element: Node): vscode.TreeItem {
     return element;
   }
 
   public getChildren(element?: Node): Thenable<Node[]> {
     if (!element) {
-      return Promise.resolve(this.targets.map((target) => this.targetItems.get(target.id) as TargetTreeItem));
+      return Promise.resolve(this.filteredTargets.map((target) => this.targetItems.get(target.id) as TargetTreeItem));
     }
 
     if (element instanceof TargetTreeItem) {
+      const visibleSourceFiles = this.getVisibleSourceFiles(element.target);
       return Promise.resolve(
-        element.target.sourceFiles.map((sourcePath) => this.sourceItems.get(this.createSourceKey(element.target.id, sourcePath)) as SourceTreeItem),
+        visibleSourceFiles.map((sourcePath) => this.sourceItems.get(this.createSourceKey(element.target.id, sourcePath)) as SourceTreeItem),
       );
     }
 
@@ -103,17 +120,47 @@ export class TargetTreeDataProvider implements vscode.TreeDataProvider<Node> {
   }
 
   private rebuildCache(): void {
-    this.targetItems = new Map(this.targets.map((target) => [target.id, new TargetTreeItem(target)]));
+    this.filteredTargets = this.targets.filter((target) => this.matchesTarget(target));
+    this.targetItems = new Map(this.filteredTargets.map((target) => [target.id, new TargetTreeItem(target)]));
     this.sourceItems = new Map();
 
     const activeSource = this.activeSourcePath ? normalizePath(this.activeSourcePath) : undefined;
-    for (const target of this.targets) {
-      for (const sourcePath of target.sourceFiles) {
+    for (const target of this.filteredTargets) {
+      for (const sourcePath of this.getVisibleSourceFiles(target)) {
         const key = this.createSourceKey(target.id, sourcePath);
         const isActive = !!activeSource && normalizePath(sourcePath) === activeSource;
         this.sourceItems.set(key, new SourceTreeItem(sourcePath, target.id, this.sourceDir, isActive));
       }
     }
+  }
+
+  private matchesTarget(target: TargetInfo): boolean {
+    const query = this.filterText.toLowerCase();
+    if (!query) {
+      return true;
+    }
+
+    return this.matchesTargetName(target, query) || target.sourceFiles.some((sourcePath) => this.matchesSourcePath(sourcePath, query));
+  }
+
+  private getVisibleSourceFiles(target: TargetInfo): string[] {
+    const query = this.filterText.toLowerCase();
+    if (!query || this.matchesTargetName(target, query)) {
+      return target.sourceFiles;
+    }
+
+    return target.sourceFiles.filter((sourcePath) => this.matchesSourcePath(sourcePath, query));
+  }
+
+  private matchesTargetName(target: TargetInfo, query: string): boolean {
+    return target.displayName.toLowerCase().includes(query)
+      || target.name.toLowerCase().includes(query)
+      || path.basename(target.guessedExecutablePath).toLowerCase().includes(query);
+  }
+
+  private matchesSourcePath(sourcePath: string, query: string): boolean {
+    return path.basename(sourcePath).toLowerCase().includes(query)
+      || relativeDisplayPath(sourcePath, this.sourceDir).toLowerCase().includes(query);
   }
 
   private createSourceKey(targetId: string, sourcePath: string): string {

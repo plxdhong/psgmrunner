@@ -15,6 +15,16 @@ interface RawPreset {
 
 interface RawPresetFile {
   readonly configurePresets?: RawPreset[];
+  readonly buildPresets?: RawBuildPreset[];
+}
+
+interface RawBuildPreset {
+  readonly name?: string;
+  readonly displayName?: string;
+  readonly hidden?: boolean;
+  readonly configurePreset?: string;
+  readonly configuration?: string;
+  readonly inherits?: string | string[];
 }
 
 export class PresetProvider {
@@ -38,7 +48,9 @@ export class PresetProvider {
 
     const parsed = JSON.parse(Buffer.from(content).toString('utf8')) as RawPresetFile;
     const configurePresets = Array.isArray(parsed.configurePresets) ? parsed.configurePresets : [];
+    const buildPresets = Array.isArray(parsed.buildPresets) ? parsed.buildPresets : [];
     const presetMap = new Map(configurePresets.filter((preset) => preset.name).map((preset) => [preset.name as string, preset]));
+    const buildPresetMap = new Map(buildPresets.filter((preset) => preset.name).map((preset) => [preset.name as string, preset]));
 
     const resolvePreset = (presetName: string, trail: Set<string>): RawPreset => {
       const preset = presetMap.get(presetName);
@@ -66,11 +78,52 @@ export class PresetProvider {
       return { ...mergedParent, ...preset };
     };
 
+    const resolveBuildPreset = (presetName: string, trail: Set<string>): RawBuildPreset => {
+      const preset = buildPresetMap.get(presetName);
+      if (!preset) {
+        return {};
+      }
+
+      if (trail.has(presetName)) {
+        return preset;
+      }
+
+      const nextTrail = new Set(trail);
+      nextTrail.add(presetName);
+
+      const inheritedPresets = Array.isArray(preset.inherits)
+        ? preset.inherits
+        : preset.inherits
+          ? [preset.inherits]
+          : [];
+
+      const mergedParent = inheritedPresets.reduce<RawBuildPreset>((accumulator, inheritedName) => {
+        return { ...accumulator, ...resolveBuildPreset(inheritedName, nextTrail) };
+      }, {});
+
+      return { ...mergedParent, ...preset };
+    };
+
+    const resolvedBuildPresets = buildPresets
+      .filter((preset) => preset.name)
+      .map((preset) => resolveBuildPreset(preset.name as string, new Set<string>()))
+      .filter((preset) => !preset.hidden && !!preset.name && !!preset.configurePreset);
+
+    const buildPresetByConfigurePreset = new Map<string, RawBuildPreset>();
+    for (const buildPreset of resolvedBuildPresets) {
+      const configurePresetName = buildPreset.configurePreset as string;
+      const existing = buildPresetByConfigurePreset.get(configurePresetName);
+      if (!existing || buildPreset.name === configurePresetName) {
+        buildPresetByConfigurePreset.set(configurePresetName, buildPreset);
+      }
+    }
+
     const presets = configurePresets
       .filter((preset) => preset.name)
       .map((preset) => resolvePreset(preset.name as string, new Set<string>()))
       .filter((preset) => !preset.hidden && !!preset.name && !!preset.binaryDir)
       .map((preset) => {
+        const matchingBuildPreset = buildPresetByConfigurePreset.get(preset.name as string);
         const variables = {
           presetName: preset.name,
           sourceDir: this.workspaceRoot,
@@ -83,6 +136,8 @@ export class PresetProvider {
           displayName: preset.displayName ?? (preset.name as string),
           binaryDir: toAbsolutePath(resolvedBinaryDir, this.workspaceRoot),
           sourceDir: this.workspaceRoot,
+          buildPresetName: matchingBuildPreset?.name,
+          configuration: matchingBuildPreset?.configuration,
           description: preset.description,
         } satisfies PresetInfo;
       })
