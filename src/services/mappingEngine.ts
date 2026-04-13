@@ -1,7 +1,7 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { MappingIndex, PresetInfo, TargetInfo } from '../models';
-import { getDefaultExecutablePath, normalizePath, toAbsolutePath, uniqueSorted } from '../utils';
+import { getDefaultExecutablePath, normalizePath, parseJsonBuffer, toAbsolutePath, uniqueSorted } from '../utils';
 import { OutputLogger } from './outputLogger';
 
 interface FileApiIndexObject {
@@ -97,7 +97,7 @@ export class MappingEngine {
 
     const indexPath = vscode.Uri.file(path.join(replyDir.fsPath, latestIndexFileName));
     const indexContent = await vscode.workspace.fs.readFile(indexPath);
-    const parsedIndex = JSON.parse(Buffer.from(indexContent).toString('utf8')) as FileApiIndex;
+    const parsedIndex = parseJsonBuffer<FileApiIndex>(indexContent).value;
     const replyEntries = Array.isArray(parsedIndex.reply)
       ? parsedIndex.reply
       : Object.values(parsedIndex.reply ?? {});
@@ -109,7 +109,7 @@ export class MappingEngine {
 
     const codemodelPath = vscode.Uri.file(path.join(replyDir.fsPath, codemodelRef.jsonFile));
     const codemodelContent = await vscode.workspace.fs.readFile(codemodelPath);
-    const codemodel = JSON.parse(Buffer.from(codemodelContent).toString('utf8')) as FileApiCodemodel;
+    const codemodel = parseJsonBuffer<FileApiCodemodel>(codemodelContent).value;
     const targets = new Map<string, TargetInfo>();
     const sourceToTargets = new Map<string, string[]>();
     // this.logger.info(`Reading CMake File API index ${indexPath.fsPath}`);
@@ -126,7 +126,7 @@ export class MappingEngine {
 
         const targetPath = vscode.Uri.file(path.join(replyDir.fsPath, targetRef.jsonFile));
         const targetContent = await vscode.workspace.fs.readFile(targetPath);
-        const target = JSON.parse(Buffer.from(targetContent).toString('utf8')) as FileApiTarget;
+        const target = parseJsonBuffer<FileApiTarget>(targetContent).value;
 
         if (target.type !== 'EXECUTABLE' || !target.name) {
           continue;

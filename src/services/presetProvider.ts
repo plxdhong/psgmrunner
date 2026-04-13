@@ -35,18 +35,19 @@ export class PresetProvider {
 
   public async loadPresets(): Promise<PresetInfo[]> {
     const presetsPath = vscode.Uri.file(path.join(this.workspaceRoot, 'CMakePresets.json'));
-    let content: Uint8Array;
+    let rawText: string;
 
     // this.logger.info(`Loading presets from ${presetsPath.fsPath}`);
 
     try {
-      content = await vscode.workspace.fs.readFile(presetsPath);
+      const document = await vscode.workspace.openTextDocument(presetsPath);
+      rawText = document.getText();
     } catch (error) {
       this.logger.warn(`Unable to read presets file ${presetsPath.fsPath}: ${error instanceof Error ? error.message : String(error)}`);
       return [];
     }
 
-    const parsed = JSON.parse(Buffer.from(content).toString('utf8')) as RawPresetFile;
+    const parsed = JSON.parse(rawText.replace(/^\uFEFF/, '')) as RawPresetFile;
     const configurePresets = Array.isArray(parsed.configurePresets) ? parsed.configurePresets : [];
     const buildPresets = Array.isArray(parsed.buildPresets) ? parsed.buildPresets : [];
     const presetMap = new Map(configurePresets.filter((preset) => preset.name).map((preset) => [preset.name as string, preset]));

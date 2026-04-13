@@ -1,5 +1,12 @@
 import * as path from 'path';
 
+type JsonEncoding = 'utf8' | 'utf16le' | 'utf16be';
+
+interface ParsedJsonBuffer<T> {
+  readonly value: T;
+  readonly encoding: JsonEncoding;
+}
+
 export function normalizePath(filePath: string): string {
   const normalized = path.normalize(filePath);
   return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
@@ -61,4 +68,64 @@ export function quoteForShell(commandPart: string): string {
 export function relativeDisplayPath(filePath: string, sourceDir: string): string {
   const relative = path.relative(sourceDir, filePath);
   return relative && !relative.startsWith('..') ? relative : filePath;
+}
+
+export function parseJsonBuffer<T>(content: Uint8Array): ParsedJsonBuffer<T> {
+  const buffer = Buffer.from(content);
+  let lastError: unknown;
+
+  for (const encoding of getJsonEncodingCandidates(buffer)) {
+    try {
+      const text = decodeJsonBuffer(buffer, encoding).replace(/^\uFEFF/, '');
+      return {
+        value: JSON.parse(text) as T,
+        encoding,
+      };
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError instanceof Error
+    ? lastError
+    : new Error('Unable to parse JSON content with supported encodings');
+}
+
+function getJsonEncodingCandidates(buffer: Buffer): JsonEncoding[] {
+  const candidates: JsonEncoding[] = [];
+
+  if (buffer.length >= 3 && buffer[0] === 0xef && buffer[1] === 0xbb && buffer[2] === 0xbf) {
+    candidates.push('utf8');
+  } else if (buffer.length >= 2 && buffer[0] === 0xff && buffer[1] === 0xfe) {
+    candidates.push('utf16le');
+  } else if (buffer.length >= 2 && buffer[0] === 0xfe && buffer[1] === 0xff) {
+    candidates.push('utf16be');
+  }
+
+  for (const encoding of ['utf8', 'utf16le', 'utf16be'] as const) {
+    if (!candidates.includes(encoding)) {
+      candidates.push(encoding);
+    }
+  }
+
+  return candidates;
+}
+
+function decodeJsonBuffer(buffer: Buffer, encoding: JsonEncoding): string {
+  if (encoding === 'utf8') {
+    return new TextDecoder('utf-8').decode(buffer);
+  }
+
+  if (encoding === 'utf16le') {
+    return new TextDecoder('utf-16le').decode(buffer);
+  }
+
+  const swapped = Buffer.from(buffer);
+  for (let index = 0; index + 1 < swapped.length; index += 2) {
+    const first = swapped[index];
+    swapped[index] = swapped[index + 1];
+    swapped[index + 1] = first;
+  }
+
+  return new TextDecoder('utf-16le').decode(swapped);
 }
