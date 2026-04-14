@@ -1,8 +1,12 @@
+import { execFile } from 'child_process';
 import * as path from 'path';
+import { promisify } from 'util';
 import * as vscode from 'vscode';
 import { PresetInfo } from '../models';
-import { replaceTemplateVariables, toAbsolutePath } from '../utils';
+import { parseJsonBuffer, replaceTemplateVariables, toAbsolutePath } from '../utils';
 import { OutputLogger } from './outputLogger';
+
+const execFileAsync = promisify(execFile);
 
 interface RawPreset {
   readonly name?: string;
@@ -14,6 +18,7 @@ interface RawPreset {
 }
 
 interface RawPresetFile {
+  readonly include?: string[];
   readonly configurePresets?: RawPreset[];
   readonly buildPresets?: RawBuildPreset[];
 }
@@ -27,6 +32,11 @@ interface RawBuildPreset {
   readonly inherits?: string | string[];
 }
 
+interface ListedPreset {
+  readonly name: string;
+  readonly displayName?: string;
+}
+
 export class PresetProvider {
   public constructor(
     private readonly workspaceRoot: string,
@@ -34,24 +44,23 @@ export class PresetProvider {
   ) {}
 
   public async loadPresets(): Promise<PresetInfo[]> {
-    const presetsPath = vscode.Uri.file(path.join(this.workspaceRoot, 'CMakePresets.json'));
-    let rawText: string;
+    const [listedConfigurePresets, listedBuildPresets, loadedPresetFiles] = await Promise.all([
+      this.listPresetsFromCMake('configure'),
+      this.listPresetsFromCMake('build'),
+      this.loadPresetFiles(),
+    ]);
 
-    // this.logger.info(`Loading presets from ${presetsPath.fsPath}`);
+    const configurePresets = loadedPresetFiles.configurePresets;
+    const buildPresets = loadedPresetFiles.buildPresets;
 
-    try {
-      const document = await vscode.workspace.openTextDocument(presetsPath);
-      rawText = document.getText();
-    } catch (error) {
-      this.logger.warn(`Unable to read presets file ${presetsPath.fsPath}: ${error instanceof Error ? error.message : String(error)}`);
+    if (configurePresets.length === 0 && listedConfigurePresets.length === 0) {
       return [];
     }
 
-    const parsed = JSON.parse(rawText.replace(/^\uFEFF/, '')) as RawPresetFile;
-    const configurePresets = Array.isArray(parsed.configurePresets) ? parsed.configurePresets : [];
-    const buildPresets = Array.isArray(parsed.buildPresets) ? parsed.buildPresets : [];
     const presetMap = new Map(configurePresets.filter((preset) => preset.name).map((preset) => [preset.name as string, preset]));
     const buildPresetMap = new Map(buildPresets.filter((preset) => preset.name).map((preset) => [preset.name as string, preset]));
+    const listedConfigurePresetMap = new Map(listedConfigurePresets.map((preset) => [preset.name, preset]));
+    const listedBuildPresetNames = new Set(listedBuildPresets.map((preset) => preset.name));
 
     const resolvePreset = (presetName: string, trail: Set<string>): RawPreset => {
       const preset = presetMap.get(presetName);
@@ -108,7 +117,17 @@ export class PresetProvider {
     const resolvedBuildPresets = buildPresets
       .filter((preset) => preset.name)
       .map((preset) => resolveBuildPreset(preset.name as string, new Set<string>()))
-      .filter((preset) => !preset.hidden && !!preset.name && !!preset.configurePreset);
+      .filter((preset) => {
+        if (!preset.name || !preset.configurePreset) {
+          return false;
+        }
+
+        if (listedBuildPresetNames.size > 0) {
+          return listedBuildPresetNames.has(preset.name);
+        }
+
+        return !preset.hidden;
+      });
 
     const buildPresetByConfigurePreset = new Map<string, RawBuildPreset>();
     for (const buildPreset of resolvedBuildPresets) {
@@ -122,7 +141,17 @@ export class PresetProvider {
     const presets = configurePresets
       .filter((preset) => preset.name)
       .map((preset) => resolvePreset(preset.name as string, new Set<string>()))
-      .filter((preset) => !preset.hidden && !!preset.name && !!preset.binaryDir)
+      .filter((preset) => {
+        if (!preset.name || !preset.binaryDir) {
+          return false;
+        }
+
+        if (listedConfigurePresetMap.size > 0) {
+          return listedConfigurePresetMap.has(preset.name);
+        }
+
+        return !preset.hidden;
+      })
       .map((preset) => {
         const matchingBuildPreset = buildPresetByConfigurePreset.get(preset.name as string);
         const variables = {
@@ -134,7 +163,7 @@ export class PresetProvider {
 
         return {
           name: preset.name as string,
-          displayName: preset.displayName ?? (preset.name as string),
+          displayName: listedConfigurePresetMap.get(preset.name as string)?.displayName ?? preset.displayName ?? (preset.name as string),
           binaryDir: toAbsolutePath(resolvedBinaryDir, this.workspaceRoot),
           sourceDir: this.workspaceRoot,
           buildPresetName: matchingBuildPreset?.name,
@@ -146,5 +175,102 @@ export class PresetProvider {
 
     // this.logger.info(`Loaded ${presets.length} visible configure preset(s)`);
     return presets;
+  }
+
+  private async listPresetsFromCMake(type: 'configure' | 'build'): Promise<ListedPreset[]> {
+    try {
+      const { stdout } = await execFileAsync('cmake', ['-S', this.workspaceRoot, `--list-presets=${type}`], {
+        cwd: this.workspaceRoot,
+        windowsHide: true,
+      });
+
+      const presets: ListedPreset[] = [];
+      for (const line of stdout.split(/\r?\n/).map((item) => item.trim())) {
+        const match = line.match(/^"([^"]+)"(?:\s+-\s+(.+))?$/);
+        if (!match) {
+          continue;
+        }
+
+        presets.push({
+          name: match[1],
+          displayName: match[2],
+        });
+      }
+
+      return presets;
+    } catch (error) {
+      this.logger.warn(`Unable to query ${type} presets from CMake: ${error instanceof Error ? error.message : String(error)}`);
+      return [];
+    }
+  }
+
+  private async loadPresetFiles(): Promise<{ configurePresets: RawPreset[]; buildPresets: RawBuildPreset[] }> {
+    const configurePresets: RawPreset[] = [];
+    const buildPresets: RawBuildPreset[] = [];
+    const visitedFiles = new Set<string>();
+
+    for (const rootFileName of ['CMakePresets.json', 'CMakeUserPresets.json']) {
+      const rootFilePath = path.join(this.workspaceRoot, rootFileName);
+      const presetFile = await this.readPresetFile(rootFilePath, visitedFiles);
+      if (!presetFile) {
+        continue;
+      }
+
+      configurePresets.push(...presetFile.configurePresets);
+      buildPresets.push(...presetFile.buildPresets);
+    }
+
+    return { configurePresets, buildPresets };
+  }
+
+  private async readPresetFile(
+    filePath: string,
+    visitedFiles: Set<string>,
+  ): Promise<{ configurePresets: RawPreset[]; buildPresets: RawBuildPreset[] } | undefined> {
+    const normalizedFilePath = path.normalize(filePath);
+    if (visitedFiles.has(normalizedFilePath)) {
+      return {
+        configurePresets: [],
+        buildPresets: [],
+      };
+    }
+
+    const uri = vscode.Uri.file(filePath);
+    let rawPresetFile: RawPresetFile;
+
+    try {
+      const content = await vscode.workspace.fs.readFile(uri);
+      rawPresetFile = parseJsonBuffer<RawPresetFile>(content).value;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException | undefined)?.code !== 'FileNotFound') {
+        this.logger.warn(`Unable to read presets file ${filePath}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+
+      return undefined;
+    }
+
+    visitedFiles.add(normalizedFilePath);
+
+    const configurePresets: RawPreset[] = [];
+    const buildPresets: RawBuildPreset[] = [];
+    const includes = Array.isArray(rawPresetFile.include) ? rawPresetFile.include : [];
+
+    for (const includePath of includes) {
+      const nestedFilePath = path.isAbsolute(includePath)
+        ? includePath
+        : path.resolve(path.dirname(filePath), includePath);
+      const nestedPresetFile = await this.readPresetFile(nestedFilePath, visitedFiles);
+      if (!nestedPresetFile) {
+        continue;
+      }
+
+      configurePresets.push(...nestedPresetFile.configurePresets);
+      buildPresets.push(...nestedPresetFile.buildPresets);
+    }
+
+    configurePresets.push(...(Array.isArray(rawPresetFile.configurePresets) ? rawPresetFile.configurePresets : []));
+    buildPresets.push(...(Array.isArray(rawPresetFile.buildPresets) ? rawPresetFile.buildPresets : []));
+
+    return { configurePresets, buildPresets };
   }
 }
