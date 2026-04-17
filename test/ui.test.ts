@@ -42,6 +42,21 @@ describe('ui', () => {
       const item = provider.findItem('unknown');
       assert.strictEqual(item, undefined);
     });
+
+    it('should return tree items from getChildren', async () => {
+      const provider = new PresetTreeDataProvider();
+      provider.setPresets([
+        {
+          name: 'debug',
+          displayName: 'Debug',
+          binaryDir: '/build/debug',
+          sourceDir: '/src',
+        },
+      ], 'debug');
+      const children = await provider.getChildren();
+      assert.strictEqual(children.length, 1);
+      assert.strictEqual(provider.getTreeItem(children[0]), children[0]);
+    });
   });
 
   describe('PresetTreeItem', () => {
@@ -66,6 +81,19 @@ describe('ui', () => {
       };
       const item = new PresetTreeItem(preset, true);
       assert.strictEqual(item.description, 'Current');
+    });
+
+    it('should include command and tooltip details', () => {
+      const preset = {
+        name: 'debug',
+        displayName: 'Debug',
+        binaryDir: '/build/debug',
+        sourceDir: '/src',
+        description: 'Debug preset',
+      };
+      const item = new PresetTreeItem(preset, false);
+      assert.strictEqual(item.command?.command, 'psgmrunner.selectPreset');
+      assert.ok(String(item.tooltip).includes('/build/debug'));
     });
   });
 
@@ -219,6 +247,69 @@ describe('ui', () => {
       const children = provider.getChildren();
       assert.ok(children);
     });
+
+    it('should return children for a target item', async () => {
+      const provider = new TargetTreeDataProvider();
+      const targets: TargetInfo[] = [{
+        id: 'myapp',
+        name: 'myapp',
+        displayName: 'My App',
+        sourceFiles: ['/src/main.cpp', '/src/lib.cpp'],
+        guessedExecutablePath: '/build/myapp',
+      }];
+      provider.setTargets(targets, '/src', undefined);
+      const rootChildren = await provider.getChildren();
+      const nestedChildren = await provider.getChildren(rootChildren[0]);
+      assert.strictEqual(rootChildren.length, 1);
+      assert.strictEqual(nestedChildren.length, 2);
+      assert.strictEqual(provider.getTreeItem(rootChildren[0]), rootChildren[0]);
+    });
+
+    it('should return only matching source children when filter matches source path', async () => {
+      const provider = new TargetTreeDataProvider();
+      const targets: TargetInfo[] = [{
+        id: 'myapp',
+        name: 'myapp',
+        displayName: 'My App',
+        sourceFiles: ['/src/main.cpp', '/src/lib.cpp'],
+        guessedExecutablePath: '/build/myapp',
+      }];
+      provider.setTargets(targets, '/src', undefined);
+      provider.setFilterText('lib.cpp');
+      const rootChildren = await provider.getChildren();
+      const nestedChildren = await provider.getChildren(rootChildren[0]);
+      assert.strictEqual(nestedChildren.length, 1);
+      assert.strictEqual((nestedChildren[0] as SourceTreeItem).sourcePath, '/src/lib.cpp');
+    });
+
+    it('should return empty children for source items and undefined parent for targets', async () => {
+      const provider = new TargetTreeDataProvider();
+      const targets: TargetInfo[] = [{
+        id: 'myapp',
+        name: 'myapp',
+        displayName: 'My App',
+        sourceFiles: ['/src/main.cpp'],
+        guessedExecutablePath: '/build/myapp',
+      }];
+      provider.setTargets(targets, '/src', undefined);
+      const source = provider.findFirstSourceItemByFile('/src/main.cpp') as SourceTreeItem;
+      const sourceChildren = await provider.getChildren(source);
+      const targetItem = provider.findTargetItem('myapp') as TargetTreeItem;
+      assert.deepStrictEqual(sourceChildren, []);
+      assert.strictEqual(provider.getParent(targetItem), undefined);
+    });
+
+    it('should trim filter text and expose it', () => {
+      const provider = new TargetTreeDataProvider();
+      provider.setFilterText('  app  ');
+      assert.strictEqual(provider.getFilterText(), 'app');
+    });
+
+    it('should return undefined when source item is not found', () => {
+      const provider = new TargetTreeDataProvider();
+      provider.setTargets([], '/src', undefined);
+      assert.strictEqual(provider.findFirstSourceItemByFile('/src/missing.cpp'), undefined);
+    });
   });
 
   describe('TargetTreeItem', () => {
@@ -233,6 +324,7 @@ describe('ui', () => {
       const item = new TargetTreeItem(target);
       assert.strictEqual(item.label, 'My App');
       assert.strictEqual(item.contextValue, 'target');
+      assert.ok(String(item.tooltip).includes('/build/myapp'));
     });
   });
 
@@ -241,6 +333,7 @@ describe('ui', () => {
       const item = new SourceTreeItem('/src/main.cpp', 'myapp', '/src', false);
       assert.ok(item.label);
       assert.strictEqual(item.contextValue, 'source');
+      assert.strictEqual(item.command?.command, 'vscode.open');
     });
 
     it('should show current indicator when active', () => {

@@ -1,13 +1,9 @@
-// Comprehensive Mock for VS Code Extension Testing
-// Works with mocha --require flag
-
 const Module = require('module');
+const fs = require('fs');
 const path = require('path');
 const projectRoot = process.cwd();
 
-// Fully mock VS Code module
 const vscode = {
-  // Workspace APIs
   workspace: {
     getConfiguration: (section = '') => ({
       get: (key, defaultValue) => {
@@ -25,15 +21,33 @@ const vscode = {
     }),
     workspaceFolders: [{ uri: { fsPath: projectRoot } }],
     fs: {
-      readFile: async () => new Uint8Array(),
-      readDirectory: async () => [],
-      createDirectory: async () => {},
-      writeFile: async () => {},
-      stat: async () => ({ ctime: 0, mtime: 0, size: 0, type: 1 }),
+      readFile: async (uri) => fs.promises.readFile(uri.fsPath),
+      readDirectory: async (uri) => {
+        const entries = await fs.promises.readdir(uri.fsPath, { withFileTypes: true });
+        return entries.map((entry) => [
+          entry.name,
+          entry.isDirectory() ? 2 : entry.isFile() ? 1 : 0,
+        ]);
+      },
+      createDirectory: async (uri) => {
+        await fs.promises.mkdir(uri.fsPath, { recursive: true });
+      },
+      writeFile: async (uri, content) => {
+        await fs.promises.mkdir(path.dirname(uri.fsPath), { recursive: true });
+        await fs.promises.writeFile(uri.fsPath, Buffer.from(content));
+      },
+      stat: async (uri) => {
+        const stats = await fs.promises.stat(uri.fsPath);
+        return {
+          ctime: stats.ctimeMs,
+          mtime: stats.mtimeMs,
+          size: stats.size,
+          type: stats.isDirectory() ? 2 : 1,
+        };
+      },
     },
   },
-  
-  // Window APIs  
+
   window: {
     createOutputChannel: (name) => ({
       name, append: () => {}, appendLine: () => {}, clear: () => {}, show: () => {}, hide: () => {}, dispose: () => {},
@@ -46,14 +60,12 @@ const vscode = {
     activeTextEditor: undefined,
     onDidChangeActiveTextEditor: () => ({ dispose: () => {} }),
   },
-  
-  // Commands
+
   commands: {
     registerCommand: () => ({ dispose: () => {} }),
     executeCommand: async () => undefined,
   },
-  
-  // Tree Views
+
   TreeItem: class {
     constructor(label, collapsibleState = 0) {
       this.label = label;
@@ -63,27 +75,29 @@ const vscode = {
   },
   TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
   TreeDataProvider: class {},
-  
-  // File System
+
   FileType: { Unknown: 0, File: 1, Directory: 2, SymbolicLink: 64 },
   Uri: {
     file: (fsPath) => ({ fsPath }),
     parse: (uri) => ({ fsPath: uri }),
   },
-  
-  // Events
+
   EventEmitter: class {
-    constructor() { this.event = () => {}; }
-    fire(data) { this.event(data); }
+    constructor() {
+      this.listeners = new Set();
+      this.event = (listener) => {
+        this.listeners.add(listener);
+        return { dispose: () => this.listeners.delete(listener) };
+      };
+    }
+    fire(data) { this.listeners.forEach((listener) => listener(data)); }
     dispose() { }
   },
-  
-  // Debug
+
   debug: {
     startDebugging: async () => false,
   },
-  
-  // Tasks
+
   tasks: {
     executeTask: async () => ({}),
     onDidEndTaskProcess: () => ({ dispose: () => {} }),
@@ -93,19 +107,33 @@ const vscode = {
     TaskGroup: { Build: {}, Clean: {}, Test: {} },
     TaskScope: { Workspace: 2 },
   },
-  
-  // Shell
+  TaskRevealKind: { Never: 1, Always: 2, Silent: 3 },
+  TaskPanelKind: { Dedicated: 1, Shared: 2, Silent: 3, NewWindow: 4 },
+  TaskGroup: { Build: {}, Clean: {}, Test: {} },
+  TaskScope: { Workspace: 2 },
+
+  Task: class {
+    constructor(definition, scope, name, source, execution, problemMatchers) {
+      this.definition = definition;
+      this.scope = scope;
+      this.name = name;
+      this.source = source;
+      this.execution = execution;
+      this.problemMatchers = problemMatchers;
+      this.presentationOptions = undefined;
+      this.group = undefined;
+    }
+  },
+
   ShellExecution: class {
     constructor(cmd, opts = {}) { this.command = cmd; this.options = opts; }
   },
-  
-  // Theme
+
   ThemeIcon: class {
     constructor(id) { this.id = id; }
   },
 };
 
-// Install mock BEFORE mocha loads test files
 const originalLoad = Module._load;
 Module._load = function(request, parent, isMain) {
   if (request === 'vscode' || request.startsWith('vscode/')) {
@@ -122,6 +150,5 @@ Module._resolveFilename = function(request, parent, isMain, options) {
   return originalResolve.call(Module, request, parent, isMain, options);
 };
 
-// Export for direct require
 module.exports = vscode;
 module.exports.default = vscode;
