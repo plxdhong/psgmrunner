@@ -20,11 +20,17 @@
         "clean": "node -e \"require('fs').rmSync('out', { recursive: true, force: true })\"",
         "compile": "npm run clean && tsc -p ./",
         "watch": "tsc -watch -p ./",
-        "package:vsix": "npx @vscode/vsce package --allow-missing-repository"
+        "package:vsix": "npx @vscode/vsce package --allow-missing-repository",
+        "test": "npm run compile && npm run compile:test && c8 --reporter=text mocha --timeout 10000 'out/test/**/*.test.js'",
+        "test:watch": "npm run compile && npm run compile:test && mocha --timeout 10000 'out/test/**/*.test.js' --watch",
+        "compile:test": "tsc -p tsconfig.test.json"
     },
     "devDependencies": {
+        "@types/mocha": "^10.0.6",
         "@types/node": "^20.11.30",
         "@types/vscode": "^1.85.0",
+        "c8": "^9.1.0",
+        "mocha": "^10.4.0",
         "typescript": "^5.4.5"
     },
     "contributes": {
