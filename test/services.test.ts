@@ -1,4 +1,5 @@
 import * as assert from 'assert';
+import * as path from 'path';
 import * as vscode from 'vscode';
 import { OutputLogger } from '../src/services/outputLogger';
 import { ConfigurationManager } from '../src/services/configurationManager';
@@ -233,7 +234,10 @@ it('should call appendLine for info level', () => {
         buildPresetArgument: '',
       });
 
-      assert.strictEqual(result, require('path').join('/build/debug', 'myapp.exe'));
+      assert.strictEqual(
+        result,
+        path.join('/build/debug', process.platform === 'win32' ? 'myapp.exe' : 'myapp'),
+      );
 
       vscode.workspace.getConfiguration = originalGetConfig;
     });

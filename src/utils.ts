@@ -8,7 +8,7 @@ interface ParsedJsonBuffer<T> {
 }
 
 export function normalizePath(filePath: string): string {
-  const normalized = path.normalize(filePath);
+  const normalized = path.normalize(filePath.replace(/[\\/]+/g, path.sep));
   return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
 }
 
