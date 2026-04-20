@@ -11,6 +11,7 @@ const testFiles = [
   'out/test/ui.test.js',
   'out/test/integration.test.js',
   'out/test/workflow.test.js',
+  'out/test/extension.test.js',
 ];
 
 const child = spawn(process.execPath, ['-r', mockPath, 'node_modules/mocha/bin/mocha', '--timeout', '10000', ...testFiles], {

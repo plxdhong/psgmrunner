@@ -21,6 +21,7 @@ Implementation and architecture notes are available in `doc/architecture.zh-CN.m
 - Reveals the matching source node when the active editor switches to a mapped file
 - Supports target filtering by target name, executable name, or source file name
 - Builds, runs, and debugs targets from the `Targets` view or from the active mapped source file
+- Adds an editor title build button that starts from the current file and lets you pick from auto-filtered targets
 - Lets you customize configure, build, and run command templates through `settings.json`
 
 ## Typical Workflow
@@ -106,7 +107,7 @@ By default, both actions build the target first.
 
 ### 6. Filter targets
 
-Use `Filter` in the **Targets** view to match:
+Use `Filter` in the **Targets** view to open a target picker that is auto-filtered from the current file when possible. You can still fall back to manual text filtering to match:
 
 - target display name
 - executable file name

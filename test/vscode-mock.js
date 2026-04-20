@@ -2,6 +2,14 @@ const Module = require('module');
 const fs = require('fs');
 const path = require('path');
 const projectRoot = process.cwd();
+const registeredCommands = new Map();
+const createdTreeViews = new Map();
+
+function resetMockState() {
+  registeredCommands.clear();
+  createdTreeViews.clear();
+  vscode.window.activeTextEditor = undefined;
+}
 
 const vscode = {
   workspace: {
@@ -52,6 +60,18 @@ const vscode = {
     createOutputChannel: (name) => ({
       name, append: () => {}, appendLine: () => {}, clear: () => {}, show: () => {}, hide: () => {}, dispose: () => {},
     }),
+    createTreeView: (id, options) => {
+      const view = {
+        id,
+        options,
+        description: undefined,
+        message: undefined,
+        reveal: async () => undefined,
+        dispose: () => { createdTreeViews.delete(id); },
+      };
+      createdTreeViews.set(id, view);
+      return view;
+    },
     showInformationMessage: async (msg) => undefined,
     showWarningMessage: async (msg) => undefined,
     showErrorMessage: async (msg) => undefined,
@@ -62,8 +82,17 @@ const vscode = {
   },
 
   commands: {
-    registerCommand: () => ({ dispose: () => {} }),
-    executeCommand: async () => undefined,
+    registerCommand: (command, callback) => {
+      registeredCommands.set(command, callback);
+      return { dispose: () => registeredCommands.delete(command) };
+    },
+    executeCommand: async (command, ...args) => {
+      const callback = registeredCommands.get(command);
+      if (callback) {
+        return callback(...args);
+      }
+      return undefined;
+    },
   },
 
   TreeItem: class {
@@ -131,6 +160,11 @@ const vscode = {
 
   ThemeIcon: class {
     constructor(id) { this.id = id; }
+  },
+  __mock: {
+    registeredCommands,
+    createdTreeViews,
+    reset: resetMockState,
   },
 };
 

@@ -2,7 +2,7 @@
     "name": "psgmrunner",
     "displayName": "psgmrunner",
     "description": "Preset, target, build, run, and debug workflow for CMake-based C++ projects.",
-    "version": "0.0.6",
+    "version": "0.0.7",
     "publisher": "local",
     "license": "MIT",
     "engines": {
@@ -54,6 +54,14 @@
             {
                 "command": "psgmrunner.buildTarget",
                 "title": "Build"
+            },
+            {
+                "command": "psgmrunner.buildTargetFromCurrentFile",
+                "title": "Build Target From Current File",
+                "icon": {
+                    "light": "resources/build-current-file-light.svg",
+                    "dark": "resources/build-current-file-dark.svg"
+                }
             },
             {
                 "command": "psgmrunner.filterTargets",
@@ -109,6 +117,13 @@
                     "command": "psgmrunner.clearTargetFilter",
                     "when": "view == psgmrunner.targets && psgmrunner.targetsFilterActive",
                     "group": "navigation@2"
+                }
+            ],
+            "editor/title": [
+                {
+                    "command": "psgmrunner.buildTargetFromCurrentFile",
+                    "when": "resourceScheme == file",
+                    "group": "navigation@1"
                 }
             ],
             "view/item/context": [
