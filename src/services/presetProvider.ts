@@ -6,6 +6,7 @@ import * as vscode from 'vscode';
 import { PresetInfo } from '../models';
 import { parseJsonBuffer, replaceTemplateVariables, toAbsolutePath } from '../utils';
 import { OutputLogger } from './outputLogger';
+import { findVsWhereMatch } from './windowsTooling';
 
 const execFileAsync = promisify(execFile);
 
@@ -38,6 +39,11 @@ interface ListedPreset {
   readonly displayName?: string;
 }
 
+type InheritablePreset = {
+  readonly name?: string;
+  readonly inherits?: string | string[];
+};
+
 export class PresetProvider {
   private resolvedCMakeExecutable: string | undefined;
 
@@ -65,57 +71,8 @@ export class PresetProvider {
     const listedConfigurePresetMap = new Map(listedConfigurePresets.map((preset) => [preset.name, preset]));
     const listedBuildPresetNames = new Set(listedBuildPresets.map((preset) => preset.name));
 
-    const resolvePreset = (presetName: string, trail: Set<string>): RawPreset => {
-      const preset = presetMap.get(presetName);
-      if (!preset) {
-        return {};
-      }
-
-      if (trail.has(presetName)) {
-        return preset;
-      }
-
-      const nextTrail = new Set(trail);
-      nextTrail.add(presetName);
-
-      const inheritedPresets = Array.isArray(preset.inherits)
-        ? preset.inherits
-        : preset.inherits
-          ? [preset.inherits]
-          : [];
-
-      const mergedParent = inheritedPresets.reduce<RawPreset>((accumulator, inheritedName) => {
-        return { ...accumulator, ...resolvePreset(inheritedName, nextTrail) };
-      }, {});
-
-      return { ...mergedParent, ...preset };
-    };
-
-    const resolveBuildPreset = (presetName: string, trail: Set<string>): RawBuildPreset => {
-      const preset = buildPresetMap.get(presetName);
-      if (!preset) {
-        return {};
-      }
-
-      if (trail.has(presetName)) {
-        return preset;
-      }
-
-      const nextTrail = new Set(trail);
-      nextTrail.add(presetName);
-
-      const inheritedPresets = Array.isArray(preset.inherits)
-        ? preset.inherits
-        : preset.inherits
-          ? [preset.inherits]
-          : [];
-
-      const mergedParent = inheritedPresets.reduce<RawBuildPreset>((accumulator, inheritedName) => {
-        return { ...accumulator, ...resolveBuildPreset(inheritedName, nextTrail) };
-      }, {});
-
-      return { ...mergedParent, ...preset };
-    };
+    const resolvePreset = (presetName: string, trail: Set<string>): RawPreset => resolveInheritedPreset(presetMap, presetName, trail);
+    const resolveBuildPreset = (presetName: string, trail: Set<string>): RawBuildPreset => resolveInheritedPreset(buildPresetMap, presetName, trail);
 
     const resolvedBuildPresets = buildPresets
       .filter((preset) => preset.name)
@@ -258,36 +215,15 @@ export class PresetProvider {
   }
 
   private async findCMakeFromVsWhere(): Promise<string | undefined> {
-    const programFilesX86 = process.env['ProgramFiles(x86)'] ?? process.env.ProgramFiles;
-    if (!programFilesX86) {
-      return undefined;
-    }
-
-    const vswherePath = path.join(programFilesX86, 'Microsoft Visual Studio', 'Installer', 'vswhere.exe');
-    if (!fs.existsSync(vswherePath)) {
-      return undefined;
-    }
-
-    try {
-      const { stdout } = await execFileAsync(vswherePath, [
-        '-latest',
-        '-products',
-        '*',
-        '-requires',
-        'Microsoft.VisualStudio.Component.VC.CMake.Project',
-        '-find',
-        'Common7\\IDE\\CommonExtensions\\Microsoft\\CMake\\CMake\\bin\\cmake.exe',
-      ], {
-        windowsHide: true,
-      });
-      const firstMatch = stdout
-        .split(/\r?\n/)
-        .map((line) => line.trim())
-        .find((line) => line.length > 0);
-      return firstMatch;
-    } catch {
-      return undefined;
-    }
+    return findVsWhereMatch([
+      '-latest',
+      '-products',
+      '*',
+      '-requires',
+      'Microsoft.VisualStudio.Component.VC.CMake.Project',
+      '-find',
+      'Common7\\IDE\\CommonExtensions\\Microsoft\\CMake\\CMake\\bin\\cmake.exe',
+    ]);
   }
 
   private async loadPresetFiles(): Promise<{ configurePresets: RawPreset[]; buildPresets: RawBuildPreset[] }> {
@@ -359,4 +295,34 @@ export class PresetProvider {
 
     return { configurePresets, buildPresets };
   }
+}
+
+function resolveInheritedPreset<T extends InheritablePreset>(
+  presetMap: ReadonlyMap<string, T>,
+  presetName: string,
+  trail: ReadonlySet<string>,
+): T {
+  const preset = presetMap.get(presetName);
+  if (!preset) {
+    return {} as T;
+  }
+
+  if (trail.has(presetName)) {
+    return preset;
+  }
+
+  const nextTrail = new Set(trail);
+  nextTrail.add(presetName);
+
+  const inheritedPresetNames = Array.isArray(preset.inherits)
+    ? preset.inherits
+    : preset.inherits
+      ? [preset.inherits]
+      : [];
+
+  const mergedParent = inheritedPresetNames.reduce<T>((accumulator, inheritedName) => {
+    return { ...accumulator, ...resolveInheritedPreset(presetMap, inheritedName, nextTrail) };
+  }, {} as T);
+
+  return { ...mergedParent, ...preset };
 }

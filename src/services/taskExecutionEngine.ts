@@ -1,10 +1,10 @@
-import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { TaskExecutionResult } from '../models';
 import { ConfigurationManager } from './configurationManager';
 import { OutputLogger } from './outputLogger';
+import { findVsWhereMatchSync } from './windowsTooling';
 
 interface ShellExecutionSpec {
   readonly command?: string;
@@ -133,34 +133,15 @@ function findVcvarsall(): string | undefined {
     return fromEnv;
   }
 
-  const programFilesX86 = process.env['ProgramFiles(x86)'] ?? process.env.ProgramFiles;
-  if (!programFilesX86) {
-    return undefined;
-  }
-
-  const vswherePath = path.join(programFilesX86, 'Microsoft Visual Studio', 'Installer', 'vswhere.exe');
-  if (!fs.existsSync(vswherePath)) {
-    return undefined;
-  }
-
-  try {
-    const output = execFileSync(vswherePath, [
-      '-latest',
-      '-products',
-      '*',
-      '-requires',
-      'Microsoft.VisualStudio.Component.VC.Tools.x86.x64',
-      '-find',
-      'VC\\Auxiliary\\Build\\vcvarsall.bat',
-    ], {
-      encoding: 'utf8',
-      windowsHide: true,
-    }).trim();
-
-    return output || undefined;
-  } catch {
-    return undefined;
-  }
+  return findVsWhereMatchSync([
+    '-latest',
+    '-products',
+    '*',
+    '-requires',
+    'Microsoft.VisualStudio.Component.VC.Tools.x86.x64',
+    '-find',
+    'VC\\Auxiliary\\Build\\vcvarsall.bat',
+  ]);
 }
 
 function getVcvarsallArchitecture(): string {
