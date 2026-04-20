@@ -2,7 +2,7 @@
     "name": "psgmrunner",
     "displayName": "psgmrunner",
     "description": "Preset, target, build, run, and debug workflow for CMake-based C++ projects.",
-    "version": "0.0.5",
+    "version": "0.0.6",
     "publisher": "local",
     "license": "MIT",
     "engines": {
@@ -137,6 +137,11 @@
                     "type": "string",
                     "default": "cmake --build ${buildDir}${configurationArgument} --target ${target}",
                     "description": "Build command template. Supports ${buildDir}, ${preset}, ${target}, ${sourceDir}, ${buildPreset}, ${configuration}, ${configurationArgument}, ${buildPresetArgument}, ${executablePath}, ${quotedExecutablePath}, and ${executableCommand}."
+                },
+                "psgmrunner.cmakePath": {
+                    "type": "string",
+                    "default": "",
+                    "description": "Optional path to cmake executable used for preset discovery (for example a Visual Studio bundled CMake path). Leave empty to use automatic detection."
                 },
                 "psgmrunner.tasks.presetConfigureCommandTemplate": {
                     "type": "string",
