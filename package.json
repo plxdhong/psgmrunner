@@ -2,7 +2,7 @@
     "name": "cmakerunner",
     "displayName": "CMake Runner",
     "description": "Preset, target, build, run, and debug workflow for CMake-based C++ projects.",
-    "version": "0.0.8",
+    "version": "0.1.0",
     "publisher": "local",
     "license": "MIT",
     "icon": "resources/cmake-runner.png",
