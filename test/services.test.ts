@@ -233,7 +233,8 @@ it('should call appendLine for info level', () => {
         buildPresetArgument: '',
       });
 
-      assert.strictEqual(result, require('path').join('/build/debug', 'myapp.exe'));
+      const expectedExecutableName = process.platform === 'win32' ? 'myapp.exe' : 'myapp';
+      assert.strictEqual(result, require('path').join('/build/debug', expectedExecutableName));
 
       vscode.workspace.getConfiguration = originalGetConfig;
     });

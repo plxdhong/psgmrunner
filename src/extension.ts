@@ -147,22 +147,22 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   };
 
   const revealActiveSource = async (filePath: string | undefined): Promise<void> => {
-    if (!filePath) {
+    targetTreeDataProvider.setActiveSourcePath(filePath);
+
+    if (!filePath || !targetsTreeView.visible) {
       return;
     }
 
-    targetTreeDataProvider.setActiveSourcePath(filePath);
     const sourceItem = targetTreeDataProvider.findFirstSourceItemByFile(filePath);
     if (!sourceItem) {
-      logger.info(`Active file is not present in target tree: ${filePath}`);
       return;
     }
 
     try {
       await targetsTreeView.reveal(sourceItem, {
-        select: true,
+        select: false,
         focus: false,
-        expand: true,
+        expand: false,
       });
     } catch (error) {
       logger.warn(`Unable to reveal active source ${filePath}: ${error instanceof Error ? error.message : String(error)}`);
