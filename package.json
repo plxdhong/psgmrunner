@@ -2,7 +2,7 @@
     "name": "cmakerunner",
     "displayName": "CMake Runner",
     "description": "Preset, target, build, run, and debug workflow for CMake-based C++ projects.",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "publisher": "Simon-tools",
     "repository": {
         "type": "git",
@@ -151,7 +151,7 @@
             "editor/title": [
                 {
                     "command": "cmakerunner.buildTargetFromCurrentFile",
-                    "when": "resourceScheme == file",
+                    "when": "resourceExtname == .cpp || resourceExtname == .c",
                     "group": "navigation@1"
                 }
             ],
@@ -198,7 +198,7 @@
                 },
                 "cmakerunner.tasks.presetConfigureCommandTemplate": {
                     "type": "string",
-                    "default": "cmake --preset ${preset} -DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+                    "default": "cmake --preset ${preset}",
                     "description": "Preset configure command template. Supports ${buildDir}, ${preset}, and ${sourceDir}. The default also enables compile_commands.json generation."
                 },
                 "cmakerunner.tasks.runCommandTemplate": {
