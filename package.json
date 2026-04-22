@@ -3,14 +3,22 @@
     "displayName": "CMake Runner",
     "description": "Preset, target, build, run, and debug workflow for CMake-based C++ projects.",
     "version": "0.1.0",
-    "publisher": "local",
+    "publisher": "Simon-tools",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/simonln/cmakerunner"
+    },
     "license": "MIT",
+    "bugs": {
+        "url": "https://github.com/simonln/cmakerunner/issues"
+    },
+    "homepage": "https://github.com/simonln/cmakerunner",
     "icon": "resources/cmake-runner.png",
     "engines": {
         "vscode": "^1.85.0"
     },
     "categories": [
-        "Other"
+        "Programming Languages"
     ],
     "activationEvents": [
         "onWorkspaceContains:CMakePresets.json"
