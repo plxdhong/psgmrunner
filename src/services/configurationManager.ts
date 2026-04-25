@@ -21,6 +21,15 @@ export class ConfigurationManager {
     return this.settings().get<boolean>('tasks.clearTerminalBeforeRun', true);
   }
 
+  public getDebugType(): string {
+    const configuredDebugType = this.settings().get<string>('debug.type', '').trim();
+    if (configuredDebugType) {
+      return configuredDebugType;
+    }
+
+    return process.platform === 'win32' ? 'cppvsdbg' : 'cppdbg';
+  }
+
   public resolveDebugProgram(variables: TaskVariables): string {
     const runCommand = this.getRunCommand(variables);
     const inferredProgram = extractProgramPath(runCommand);

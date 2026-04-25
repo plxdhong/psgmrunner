@@ -47,7 +47,7 @@ export function getDefaultExecutablePath(buildDir: string, targetName: string): 
 }
 
 export function extractProgramPath(commandOrPath: string): string {
-  const trimmed = commandOrPath.trim();
+  const trimmed = commandOrPath.trim().replace(/^&\s+/, '');
   if (!trimmed) {
     return trimmed;
   }

@@ -59,6 +59,7 @@ const vscode = {
     TaskGroup: { Build: 'build', Clean: 'clean', Test: 'test' },
     TaskScope: { Workspace: 2 },
   },
+  ConfigurationTarget: { Global: 1, Workspace: 2, WorkspaceFolder: 3 },
   ShellExecution: class ShellExecution {},
   ThemeIcon: class ThemeIcon {
     constructor(_id) { }

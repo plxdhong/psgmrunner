@@ -186,11 +186,6 @@
         "configuration": {
             "title": "cmakerunner",
             "properties": {
-                "cmakerunner.tasks.buildCommandTemplate": {
-                    "type": "string",
-                    "default": "cmake --build ${buildDir}${configurationArgument} --target ${target}",
-                    "description": "Build command template. Supports ${buildDir}, ${preset}, ${target}, ${sourceDir}, ${buildPreset}, ${configuration}, ${configurationArgument}, ${buildPresetArgument}, ${executablePath}, ${quotedExecutablePath}, and ${executableCommand}."
-                },
                 "cmakerunner.cmakePath": {
                     "type": "string",
                     "default": "",
@@ -201,6 +196,11 @@
                     "default": "cmake --preset ${preset}",
                     "description": "Preset configure command template. Supports ${buildDir}, ${preset}, and ${sourceDir}. The default also enables compile_commands.json generation."
                 },
+                "cmakerunner.tasks.buildCommandTemplate": {
+                    "type": "string",
+                    "default": "cmake --build ${buildDir}${configurationArgument} --target ${target}",
+                    "description": "Build command template. Supports ${buildDir}, ${preset}, ${target}, ${sourceDir}, ${buildPreset}, ${configuration}, ${configurationArgument}, ${buildPresetArgument}, ${executablePath}, ${quotedExecutablePath}, and ${executableCommand}."
+                },
                 "cmakerunner.tasks.runCommandTemplate": {
                     "type": "string",
                     "default": "${executableCommand}",
@@ -210,6 +210,11 @@
                     "type": "boolean",
                     "default": true,
                     "description": "Clear the shared terminal before starting a build or run task."
+                },
+                "cmakerunner.debug.type": {
+                    "type": "string",
+                    "default": "",
+                    "description": "Debug configuration type written into launch.json. Leave empty to use the platform default: cppvsdbg on Windows, cppdbg/lldb on other platforms."
                 }
             }
         }

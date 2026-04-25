@@ -54,7 +54,7 @@ export class WorkflowManager {
     }
 
     if (action === 'Debug') {
-      await this.startDebugging(preset, target);
+      await this.prepareDebugging(preset, target);
     }
   }
 
@@ -91,35 +91,86 @@ export class WorkflowManager {
     });
 
     if (built) {
-      await this.startDebugging(preset, target);
+      await this.prepareDebugging(preset, target);
     }
   }
 
-  private async startDebugging(preset: PresetInfo, target: TargetInfo): Promise<void> {
+  private async prepareDebugging(preset: PresetInfo, target: TargetInfo): Promise<void> {
     const variables = this.createVariables(preset, target);
     const program = this.configurationManager.resolveDebugProgram(variables);
-    const debugType = process.platform === 'win32' ? 'cppvsdbg' : 'cppdbg';
+    const debugType = this.configurationManager.getDebugType();
+    const executableName = path.basename(program || target.guessedExecutablePath);
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
 
-    // this.logger.info(`Starting debug session for ${target.name}. type=${debugType}, program=${program}`);
-
-    const started = await vscode.debug.startDebugging(undefined, {
-      name: `Debug ${target.displayName}`,
-      type: debugType,
-      request: 'launch',
-      program,
-      cwd: path.dirname(program || target.guessedExecutablePath),
-      args: [],
-      stopAtEntry: false,
-      externalConsole: false,
-    });
-
-    if (!started) {
-      this.logger.warn(`VS Code did not start a debug session for ${target.name}`);
-      void vscode.window.showWarningMessage(`Unable to start a debug session for ${target.displayName}. Make sure the C/C++ debug extension is installed and the executable exists.`);
+    if (!workspaceFolder) {
+      this.logger.warn(`Unable to write launch.json because no workspace folder is available for ${target.name}`);
+      void vscode.window.showWarningMessage(`Unable to prepare launch.json for ${target.displayName} because no workspace folder is open.`);
       return;
     }
 
-    // this.logger.info(`Debug session started for ${target.name}`);
+    const configurationName = `Debug ${target.displayName}`;
+    const launchConfiguration = {
+      name: configurationName,
+      type: debugType,
+      expressions: debugType == 'lldb' ? 'native': undefined,
+      request: 'launch',
+      program,
+      cwd: path.dirname(program || target.guessedExecutablePath),
+      args: []
+    };
+
+    const launchSettings = vscode.workspace.getConfiguration('launch', workspaceFolder.uri);
+    const existingConfigurations = launchSettings.get<Record<string, unknown>[]>('configurations', []);
+    const conflictingConfiguration = existingConfigurations.find((configuration) => {
+      const existingName = typeof configuration?.name === 'string' ? configuration.name : undefined;
+      return existingName && this.isSameExecutableName(path.basename(existingName), launchConfiguration.name);
+    });
+
+    if (conflictingConfiguration) {
+      const confirmed = await vscode.window.showWarningMessage(
+        `launch.json already contains a debug configuration for executable '${launchConfiguration.name}'. Overwrite it?`,
+        { modal: true },
+        'Overwrite',
+      );
+
+      if (confirmed !== 'Overwrite') {
+        this.logger.info(`Skipped updating launch.json for ${target.name} because overwrite was not confirmed.`);
+        return;
+      }
+    }
+
+    const nextConfigurations = existingConfigurations.filter((configuration) => {
+      const existingProgram = typeof configuration?.program === 'string' ? configuration.program : undefined;
+      return configuration?.name !== configurationName
+        && !(existingProgram && this.isSameExecutableName(path.basename(existingProgram), executableName));
+    });
+    nextConfigurations.push(launchConfiguration);
+
+    await launchSettings.update('configurations', nextConfigurations, vscode.ConfigurationTarget.WorkspaceFolder);
+    this.logger.info(`Updated launch.json for ${target.name}. configuration=${configurationName}, program=${program}`);
+
+    const action = await vscode.window.showInformationMessage(
+      `Debug configuration '${configurationName}' has been added to launch.json. Open Run and Debug, then click Debug.`,
+      'Open launch.json',
+      'Open Run and Debug',
+    );
+
+    if (action === 'Open launch.json') {
+      const launchJsonUri = vscode.Uri.joinPath(workspaceFolder.uri, '.vscode', 'launch.json');
+      const document = await vscode.workspace.openTextDocument(launchJsonUri);
+      await vscode.window.showTextDocument(document);
+      return;
+    }
+
+    if (action === 'Open Run and Debug') {
+      await vscode.commands.executeCommand('workbench.view.debug');
+    }
+  }
+
+  private isSameExecutableName(left: string, right: string): boolean {
+    return process.platform === 'win32'
+      ? left.toLowerCase() === right.toLowerCase()
+      : left === right;
   }
 
   private createPresetVariables(preset: PresetInfo): { buildDir: string; preset: string; sourceDir: string } {

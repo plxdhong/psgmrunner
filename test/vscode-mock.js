@@ -141,6 +141,7 @@ const vscode = {
   TaskPanelKind: { Dedicated: 1, Shared: 2, Silent: 3, NewWindow: 4 },
   TaskGroup: { Build: {}, Clean: {}, Test: {} },
   TaskScope: { Workspace: 2 },
+  ConfigurationTarget: { Global: 1, Workspace: 2, WorkspaceFolder: 3 },
 
   Task: class {
     constructor(definition, scope, name, source, execution, problemMatchers) {

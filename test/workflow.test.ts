@@ -27,6 +27,7 @@ describe('workflow manager', () => {
       getPresetConfigureCommand: () => 'cmake --preset debug',
       getBuildCommand: () => 'cmake --build /tmp/build/debug --target app',
       getRunCommand: () => '/tmp/build/debug/app',
+      getDebugType: () => 'cppdbg',
       resolveDebugProgram: () => '/tmp/build/debug/app',
     };
     const taskExecutionEngine = {
@@ -85,23 +86,44 @@ describe('workflow manager', () => {
     }
   });
 
-  it('buildTarget starts debugging when user chooses Debug', async () => {
+  it('buildTarget updates launch configuration when user chooses Debug', async () => {
     const deps = createDeps();
-    let debugCount = 0;
+    let updatedConfigurations: Record<string, unknown>[] = [];
     const originalShowInformationMessage = vscode.window.showInformationMessage;
-    const originalStartDebugging = vscode.debug.startDebugging;
-    (vscode.window as any).showInformationMessage = async () => 'Debug';
-    (vscode.debug as any).startDebugging = async () => {
-      debugCount += 1;
-      return true;
+    const originalGetConfiguration = vscode.workspace.getConfiguration;
+    (vscode.window as any).showInformationMessage = async (message: string) => {
+      if (message.includes('built successfully')) {
+        return 'Debug';
+      }
+      return undefined;
+    };
+    (vscode.workspace as any).getConfiguration = (section?: string, scope?: vscode.Uri) => {
+      if (section === 'launch' && scope) {
+        return {
+          get: () => [],
+          update: async (_key: string, value: Record<string, unknown>[]) => {
+            updatedConfigurations = value;
+          },
+        };
+      }
+      return originalGetConfiguration(section as never, scope);
     };
     try {
       const manager = new WorkflowManager(deps.configurationManager as never, deps.taskExecutionEngine as never, deps.logger as never);
       await manager.buildTarget(preset, target);
-      assert.strictEqual(debugCount, 1);
+      assert.strictEqual(updatedConfigurations.length, 1);
+      assert.deepStrictEqual(updatedConfigurations[0], {
+        name: 'Debug App',
+        type: 'cppdbg',
+        expressions: undefined,
+        request: 'launch',
+        program: '/tmp/build/debug/app',
+        cwd: '/tmp/build/debug',
+        args: [],
+      });
     } finally {
       (vscode.window as any).showInformationMessage = originalShowInformationMessage;
-      (vscode.debug as any).startDebugging = originalStartDebugging;
+      (vscode.workspace as any).getConfiguration = originalGetConfiguration;
     }
   });
 
@@ -169,23 +191,34 @@ describe('workflow manager', () => {
     assert.strictEqual(runDirectory, preset.binaryDir);
   });
 
-  it('debugTarget warns when debug session does not start', async () => {
+  it('debugTarget opens Run and Debug when requested after writing launch configuration', async () => {
     const deps = createDeps();
-    let warning = '';
-    const originalShowWarningMessage = vscode.window.showWarningMessage;
-    const originalStartDebugging = vscode.debug.startDebugging;
-    (vscode.window as any).showWarningMessage = async (message: string) => {
-      warning = message;
+    let executedCommand = '';
+    const originalShowInformationMessage = vscode.window.showInformationMessage;
+    const originalExecuteCommand = vscode.commands.executeCommand;
+    const originalGetConfiguration = vscode.workspace.getConfiguration;
+    (vscode.window as any).showInformationMessage = async () => 'Open Run and Debug';
+    (vscode.commands as any).executeCommand = async (command: string) => {
+      executedCommand = command;
       return undefined;
     };
-    (vscode.debug as any).startDebugging = async () => false;
+    (vscode.workspace as any).getConfiguration = (section?: string, scope?: vscode.Uri) => {
+      if (section === 'launch' && scope) {
+        return {
+          get: () => [],
+          update: async () => undefined,
+        };
+      }
+      return originalGetConfiguration(section as never, scope);
+    };
     try {
       const manager = new WorkflowManager(deps.configurationManager as never, deps.taskExecutionEngine as never, deps.logger as never);
       await manager.debugTarget(preset, target);
-      assert.ok(warning.includes('Unable to start a debug session'));
+      assert.strictEqual(executedCommand, 'workbench.view.debug');
     } finally {
-      (vscode.window as any).showWarningMessage = originalShowWarningMessage;
-      (vscode.debug as any).startDebugging = originalStartDebugging;
+      (vscode.window as any).showInformationMessage = originalShowInformationMessage;
+      (vscode.commands as any).executeCommand = originalExecuteCommand;
+      (vscode.workspace as any).getConfiguration = originalGetConfiguration;
     }
   });
 

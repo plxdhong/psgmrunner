@@ -147,6 +147,10 @@ describe('utils', () => {
       assert.strictEqual(utils.extractProgramPath('"my app" arg'), 'my app');
     });
 
+    it('should ignore PowerShell call operator before quoted path', () => {
+      assert.strictEqual(utils.extractProgramPath('& "C:\\Program Files\\app.exe" arg'), 'C:\\Program Files\\app.exe');
+    });
+
     it('should extract path before first space', () => {
       assert.strictEqual(utils.extractProgramPath('myapp arg1 arg2'), 'myapp');
     });
